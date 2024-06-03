@@ -1,0 +1,10 @@
+{  
+  "grid": {
+    "qty": "Antal",
+    "price": "Pris",
+    "buy": "Købe",
+    "each": "hver",
+    "buyitnow": "Køb det nu",
+    "off": "Af"
+  }
+}

@@ -1,0 +1,33 @@
+.oscpPriceGrid td {
+	padding: 12px;
+}
+table.oscpPriceGrid, .oscpPriceGrid tr {
+	border-collapse: collapse;
+}
+
+table#oscpPriceGrid tr:nth-child(odd) {
+    background: #f7f7fa;
+}
+table#oscpPriceGrid {
+    width: 100%;
+}
+#oscpPriceGrid th {
+    text-align: left;
+    font-size: 18px;
+    background: #47ecf2b8;
+    padding: 10px;
+    color: black;
+}
+#oscpPriceGrid td {
+    font-size: 15px;
+    padding: 9px;
+    color: black;
+}
+.customBuyNow {
+	width: 100%;
+	padding: 14px;
+	background-color: #000;
+	color: #fff;
+	text-align: center;
+	font-size: 1.5rem;
+}

@@ -1,0 +1,10 @@
+{  
+  "grid": {
+    "qty": "Määrä",
+    "price": "Hinta",
+    "buy": "Ostaa",
+    "each": "jokainen",
+    "buyitnow": "Osta nyt",
+    "off": "Vinossa"
+  }
+}

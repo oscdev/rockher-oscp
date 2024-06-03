@@ -1,0 +1,10 @@
+{  
+  "grid": {
+    "qty": "množství",
+    "price": "Cena",
+    "buy": "Koupit",
+    "each": "každý",
+    "buyitnow": "Koupit teď",
+    "off": "Vypnuto"
+  }
+}

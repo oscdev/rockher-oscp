@@ -1,0 +1,221 @@
+<div id="cancelled_pdp">
+    {% assign product_price = '' %}
+    {% assign original_price = '' %}
+    {% assign discountprice = '' %}
+    {%- assign discount_price = '' -%}
+    {%- assign discount_amount = '' -%} 
+    {%- assign discounted_pp = '' -%} 
+    {%- assign ruleTagAllCount = 0 -%}
+    {%- assign ruleTagLoggedInCount = 0 -%}
+    {%- assign ruleTagCustomerSpecificCount = 0 -%}
+    {% assign selected_variant = product.selected_variant.id %}
+    {% assign selected_variant_price = product.selected_variant.price %}
+    {% if selected_variant == blank %}
+      {% assign selected_variant = product.variants[0].id %}
+      {% assign selected_variant_price = product.variants[0].price %}
+    {% endif %}
+  {% assign selectedVariantId = selected_variant | times: 1 %}
+  {% assign isVariantLevelPricing = false %}
+  {%- for variant in product.variants -%}
+    {% if variant.metafields.oscp != blank %}
+      {% assign isVariantLevelPricing = true %} 
+    {%- endif -%}
+  {%- endfor -%}
+  {%- for variant in product.variants -%}
+    {% if selectedVariantId == variant.id %}
+      {%- for field in variant.metafields.oscp -%}
+          {%- assign ruleLine = field | last -%}
+          {%- if ruleLine != blank -%}          
+            {%- assign validRule = false -%}          
+            {%- if cart.currency.iso_code contains ruleLine.value.currency -%}
+              {%- assign validRule = true -%}
+            {%- else -%}
+              {%- assign validRule = false -%}
+            {%- endif -%}
+            {%- if validRule == true and ruleLine.value.value == blank -%}
+              {%- assign validRule = false -%}
+              {%- endif -%}
+            {%- if validRule == true and ruleLine.value.qty == blank -%}
+                {%- assign validRule = false -%}
+            {%- endif -%}
+            {%- if validRule == true and ruleLine.value.status contains 'disable' -%}
+                {%- assign validRule = false -%}
+            {%- endif -%}
+            {%- if validRule == true and ruleLine.value.type == blank -%}
+                {%- assign validRule = false -%}
+            {%- endif -%} 
+            {%- if validRule -%} 
+            {%- assign ruleTag = ruleLine.value.customer | downcase -%}
+            {%- if customer -%}             
+              {%- assign customersTags = customer.tags | downcase -%}
+              {%- if customersTags contains ruleTag -%}  
+                {%- assign ruleTagCustomerSpecificCount = ruleTagCustomerSpecificCount | plus: 1 -%}
+                {%- if ruleLine.value.type == 'discount' or ruleLine.value.type == 'percent' -%}
+                  {% assign percent = ruleLine.value.value | divided_by: 100.00 %}
+                  {% assign leftM = 1 | minus: percent %}
+                  {%- assign discount_price = selected_variant_price | times: leftM -%}
+                {%- else -%}
+                  {% assign discount_price = ruleLine.value.value | times: 100 %}
+            {% endif %}
+                {% else %}
+              {%- if ruleTag contains 'loggedin' -%}
+                {%- assign ruleTagLoggedInCount = ruleTagLoggedInCount | plus: 1 -%}
+                {%- if ruleLine.value.type == 'discount' or ruleLine.value.type == 'percent' -%}
+                  {% assign percent = ruleLine.value.value | divided_by: 100.00 %}
+                  {% assign leftM = 1 | minus: percent %}
+                  {%- assign discount_amount = selected_variant_price | times: leftM -%}
+                {%- else -%}
+                  {% assign discount_amount = ruleLine.value.value | times: 100 %}
+            {% endif %}
+                {% else %}
+              {%- if ruleTag contains 'all' -%}
+                {%- assign ruleTagAllCount = ruleTagAllCount | plus: 1 -%}
+                {%- if ruleLine.value.type == 'discount' or ruleLine.value.type == 'percent'  -%}
+                  {% assign percent = ruleLine.value.value | divided_by: 100.00 %}
+                  {% assign leftM = 1 | minus: percent %}
+                  {%- assign discounted_pp = selected_variant_price | times: leftM -%}
+                {%- else -%}
+                  {% assign discounted_pp = ruleLine.value.value | times: 100 %}
+            {% endif %}
+              {%- endif -%}
+            {%- endif -%}
+          {%- endif -%}
+          {% else %}
+          {%- if ruleTag contains 'all' -%}
+            {%- assign ruleTagAllCount = ruleTagAllCount | plus: 1 -%}
+            {%- if ruleLine.value.type == 'discount' or ruleLine.value.type == 'percent' -%}
+              {% assign percent = ruleLine.value.value | divided_by: 100.00 %}
+              {% assign leftM = 1 | minus: percent %}
+              {%- assign discounted_pp = selected_variant_price | times: leftM -%}
+            {%- else -%}
+              {% assign discounted_pp = ruleLine.value.value | times: 100 %}
+        {% endif %}
+          {%- endif -%}
+        {% endif %}
+      {% endif %}
+    {%- endif -%}
+  {%- endfor -%}
+  {%- if discount_price == '' and discount_amount == '' and discounted_pp == '' -%} 
+    {%- if isVariantLevelPricing == false -%}
+      {%- if app.metafields.oscpPriceRule != blank -%}
+        {%- for shopRule in app.metafields.oscpPriceRule.customPrice.value -%}
+          {%- assign validUser = true -%}
+          {%- if shopRule.config.userAccessibility[0] == 'loggedin' and customer == blank -%}
+            {%- assign validUser = false -%}
+          {%- elsif shopRule.config.userAccessibility[0] == 'specific' -%}
+            {%- assign isValidTag = false -%}
+            {%- if customer -%}
+              {%- for userTag in shopRule.config.userTags -%}
+                {%- assign customersTagsDowncased = customer.tags | downcase -%}
+                    {%- assign configTag = userTag.title | downcase -%}
+                    {%- if customersTagsDowncased contains configTag -%}
+                  {%- assign isValidTag = true -%}
+                  {%- break -%}
+                {%- endif -%}
+              {%- endfor -%}
+                {%- if isValidTag -%}
+                {%- assign validUser = true -%}
+              {%- else -%}
+                {%- assign validUser = false -%}
+              {%- endif -%}
+            {%- else -%}
+              {%- assign validUser = false -%}
+            {%- endif -%}
+          {%- endif -%}
+          {%- if validUser and shopRule.config.status == 1 -%}
+            {%- assign applicableProduct = false -%}
+            {%- assign applicableCollection = false -%}
+            {%- for ruleProduct in shopRule.products -%}
+              {%- if ruleProduct.id contains product.id -%}
+                {%- assign applicableProduct = true -%}
+                {%- break -%}
+              {%- endif -%}
+            {%- endfor -%}
+            {%- if applicableProduct == false -%}
+              {%- for collection in product.collections -%}
+                {%- for ruleCollection in shopRule.collections -%}
+                  {%- if ruleCollection.id contains collection.id -%}
+                    {%- assign applicableCollection = true -%}
+                    {%- break -%}
+                  {%- endif -%}
+                {%- endfor -%}
+              {%- endfor -%}
+            {%- endif -%}
+            {%- if applicableProduct or applicableCollection -%}
+              {%- assign filterdRule = shopRule.mirrorRules -%}
+              {%- break -%}
+            {%- endif -%}
+          {%- endif -%}
+        {%- endfor -%}
+      {%- else -%}
+        {% assign filterdRule = '' %}  
+      {%- endif -%}           
+        {% for info in filterdRule %}
+          {% if info.type == 'percent' %}
+            {% assign percent = info.value | divided_by: 100.00 %}
+            {% assign leftM = 1 | minus: percent %}
+            {%- assign discount1 = 0 -%}
+              {%- assign discount1 = selected_variant_price | times: leftM -%}
+          {% else %}
+            {%- assign discount1 = info.value | times: 100 -%}
+          {% endif -%}
+        {% endfor %}
+        {% if filterdRule.size == 1 %}     
+          {% assign product_price = selected_variant_price | money %}
+          {% assign discountprice =  discount1 | money %}
+          {% elsif filterdRule.size != 1 or filterdRule.size == null %}
+            {% assign original_price = selected_variant_price | money %}
+        {% endif %} 
+    {%- endif -%}
+  {%- else -%}
+    {%- if discount_price != '' -%}
+      {%- assign final_discount = discount_price -%}
+    {%- else -%}
+      {%- if discount_amount != '' -%}
+        {%- assign final_discount = discount_amount -%}
+        {% else %}
+        {%- if discounted_pp != '' -%}
+          {%- assign final_discount = discounted_pp -%}
+        {%- endif -%}
+      {%- endif -%}
+    {%- endif -%}
+        {% if final_discount != '' %}
+        {% if ruleTagCustomerSpecificCount == 1 or ruleTagLoggedInCount == 1 or ruleTagAllCount == 1 %}
+          {% assign product_price = selected_variant_price | money %}
+          {% assign discountprice = final_discount | money %}
+        {% elsif ruleTagCustomerSpecificCount != 1 or ruleTagLoggedInCount != 1 or ruleTagAllCount != 1 %}
+          {% assign original_price = selected_variant_price | money %}  
+        {% endif %}
+        {% endif %}
+    {%- endif -%} 
+{%- endif -%} 
+{% endfor %}
+<span class="original-price">
+  <del>
+    {% if product_price %}
+        {{ product_price }}
+    {% endif %}
+  </del>
+</span>
+<span class="modify_price">
+  {% if original_price %}
+    {{ original_price }}
+  {% endif %}
+</span>
+<span class="discounted-price">
+   {% if discountprice %}
+     {{ discountprice }}
+   {% endif %}
+</span>
+</div>
+
+{% schema %}
+  {
+    "name": "Discounted Price",
+    "target": "section",
+    "templates": ["product"],
+	"javascript": "app-product.js",
+	"available_if": "{{ app.metafields.app_settings.app_enabled }}",
+    "settings": []
+  }
+{% endschema %}

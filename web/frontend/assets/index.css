@@ -1,0 +1,369 @@
+input.inputQty {
+	padding: 8px;
+	border: var(--p-border-width-1) solid var(--p-border-neutral-subdued);
+	border-radius: var(--p-border-radius-1);
+}
+select.selectType {
+	padding: 8px;
+	border: var(--p-border-width-1) solid var(--p-border-neutral-subdued);
+	border-radius: var(--p-border-radius-1);
+	width: 100%;
+}
+input.inputValue {
+	padding: 8px;
+	border: var(--p-border-width-1) solid var(--p-border-neutral-subdued);
+	border-radius: var(--p-border-radius-1);
+}
+.CustomLink {
+	float: right;
+}
+.CustomIcon {
+	float: right;
+	margin-left: 7px;
+}
+.Polaris-Link:focus:not(:active) {
+	outline: none;
+}
+
+.customFooter{
+	text-align: center;
+	font-size: 12px;
+	line-height: 50px;
+}
+.CustomBody tr.Polaris-IndexTable__TableRow.priceRow:hover {
+	background-color: var(--p-surface-selected);
+	width: 100%;
+}
+.CustomBody td.Polaris-IndexTable__TableCell span {
+	text-transform: capitalize;
+}
+.priceRowHeader .Polaris-IndexTable--tableStickyLast .Polaris-IndexTable__TableCell:last-child:hover {
+	background-color: var(--p-surface-selected);
+}
+.priceRowHeader .Polaris-IndexTable--tableStickyLast .Polaris-IndexTable__TableCell:last-child {
+	background-color: transparent;
+}
+.priceRowHeader .customAction .Polaris-TextStyle--variationStrong {
+	float: none !important;
+}
+.priceRowHeader th.Polaris-DataTable__Cell.customAction.Polaris-DataTable__Cell--verticalAlignTop {
+	text-align: center;
+}
+
+.priceRowHeader .Polaris-Card__Header {
+	border-bottom: 1px solid var(--p-divider);
+	padding: 30px;
+}
+.priceRowHeader .Polaris-DataTable__Cell--numeric {
+	float: right;
+}
+.priceRowHeader span.Polaris-TextStyle--variationStrong {
+	float: left;
+}
+.priceRowHeader .Polaris-TextStyle--variationStrong .Polaris-Icon.Polaris-Icon--colorBase.Polaris-Icon--applyColor {
+	float: right;
+	margin-left: 4px;
+}
+.CustomBody td.Polaris-IndexTable__TableCell {
+	text-align: right;
+	width: 25%;
+}
+.priceRowHeader span.Polaris-TextStyle--variationStrong {
+	float: right;
+}
+.offerList .Polaris-Button--plain:hover:not(.Polaris-Button--removeUnderline), .Polaris-Button--plain:focus:not(.Polaris-Button--disabled):not(.Polaris-Button--removeUnderline) {
+	text-decoration: none;
+}
+.Polaris-Button--plain:hover:not(.Polaris-Button--removeUnderline), .Polaris-Button--plain:focus:not(.Polaris-Button--disabled):not(.Polaris-Button--removeUnderline) {
+text-decoration: none;
+}
+.offerList h2.Polaris-Heading {
+	font-size: revert;
+}
+.customHeading th.Polaris-IndexTable__TableHeading {
+	font-weight: 800;
+}
+.customTextField .Polaris-TextField {
+	width: 30rem;
+}
+
+.customTable {
+	text-align: justify;
+}
+a.customLink {
+    color: #2463bc;
+}
+.checkStatus span.Polaris-Icon {
+    margin-left: 3px;
+    margin-top: 2px;
+}
+.checkStatus {
+    display: flex;
+}
+.faqs .Polaris-Card__Section {
+    line-height: 29px;
+}
+b.titleFaq {
+    display: block;
+}
+.bulkEditForm span.Polaris-TextStyle--variationStrong {
+    float: left;
+    display: flex;
+}
+.bulkEditForm .Polaris-TextStyle--variationStrong .Polaris-Icon.Polaris-Icon--colorBase.Polaris-Icon--applyColor {
+    float: right;
+    margin-left: 4px;
+}
+.customInput {
+    width: 100%;
+}
+input.inputCustomer {
+    width: 100%;
+}
+select.customType {
+    padding: 8px;
+    border: var(--p-border-width-1) solid var(--p-border-neutral-subdued);
+    border-radius: var(--p-border-radius-1);
+	background: white;
+}
+input.customQty {
+    padding: 8px;
+    border: var(--p-border-width-1) solid var(--p-border-neutral-subdued);
+    width: 100%;
+    border-radius: var(--p-border-radius-1);
+}
+input.customValue {
+    padding: 8px;
+    border: var(--p-border-width-1) solid var(--p-border-neutral-subdued);
+    width: 100%;
+    border-radius: var(--p-border-radius-1);
+}
+input.inputCustomer {
+    padding: 8px;
+    border: var(--p-border-width-1) solid var(--p-border-neutral-subdued);
+    width: 100%;
+    border-radius: var(--p-border-radius-1);
+}
+.inputCurrencyCode {
+    padding: 8px;
+    border: var(--p-border-width-1) solid var(--p-border-neutral-subdued);
+    width: 100%;
+    border-radius: var(--p-border-radius-1);
+	background: white;
+}
+.CustomGrid {
+	text-align: right;
+}
+.customAssistance .Polaris-Tabs__Tab:focus:not(:active) .Polaris-Tabs__Title::after {
+	box-shadow: none;
+	outline: none;
+  }
+  .customAssistance .Polaris-MediaCard__MediaContainer:not(.Polaris-MediaCard--portrait) {
+    flex-basis: 13%;
+}
+.customAssistance .Polaris-Tabs__Tab {
+    cursor: auto;
+}
+
+
+.customInput {
+	width: 100%;
+}
+tr.skeletonrow td {
+    padding: 8px;
+}
+.customAssistance .Polaris-Card__Section:last-child {
+    position: relative;
+}
+.customAssistance .Polaris-Tabs__Tab:hover .Polaris-Tabs__Title::before {
+	background-color: transparent;
+}
+.customAssistance .Polaris-Tabs__Tab:hover .Polaris-Tabs__Title {
+	color: var(--p-text-subdued);
+}
+.customAssistance img {
+    margin-left: 18px;
+    margin-top: 8px;
+}
+p.customContent {
+    font-size: 0.9em;
+}
+p.page {
+	font-size: 10px;
+    top: -46px;
+    position: relative;
+    text-align: right;
+}
+p.page0 {
+    font-size: 10px;
+    top: -46px;
+    position: relative;
+    text-align: right;
+	width: 100px;
+    float: right;
+}
+.customSave .Polaris-Button__Text {
+	display: flex;
+	align-items: center;
+  }
+  .customBanner {
+    border: 1px solid gray;
+    border-radius: 7px;
+	margin-top: -46px;
+}
+.customBanner-block{
+	border: 1px solid gray;
+    border-radius: 7px;
+}
+.customBanners {
+	margin-top: -32px;
+}
+.customAssistance .Polaris-Page__Content {
+    padding-top: 0;
+}
+@media only screen and (max-width: 768px){
+	input.inputQty {
+			width: 75%;
+	}
+	select.selectType {
+			width: 75%;
+	}
+	input.inputValue {
+			width: 75%;
+	}
+	.customTable table {
+		width: 100%;
+		overflow-x: scroll;
+		padding-left: 0;
+		display: block;
+	}
+	div#app {
+		padding-bottom: 16%;
+	}
+}
+@media only screen and (max-width: 480px){
+	input.inputQty {
+			width: 75%;
+	}
+	select.selectType {
+			width: 52%;
+	}
+	input.inputValue {
+			width: 75%;
+	}
+	.customTable table {
+		width: 100%;
+		overflow-x: scroll;
+		padding-left: 0;
+		display: block;
+	}
+	div#app {
+		padding-bottom: 16%;
+	}
+}
+
+.loadingBg path {
+  fill: #ffffff;
+}​
+
+.hrDelete {
+border: 1px solid #dfe3e8;
+}
+
+.oscHeadingContent{
+	position: relative;
+}
+.oscHeadingContent img {
+	position: absolute;
+	left:  -10px;
+	top: 6px;
+}
+.cpwHeading {
+	display: block;
+	padding-left: 120px;
+
+}
+
+.cpwHeading h2 {
+	display: block;
+	height: 67px;
+	line-height: 67px;
+}
+
+.oscDashboardPage .Polaris-Stack > .Polaris-Stack__Item, .oscDashboardPage .Polaris-Stack__Item {
+	margin-top: 0px !important;
+}
+
+div#app {
+	padding-bottom: 5%;
+}
+.customTable .Polaris-IndexTable__TableCell {
+    white-space: unset;
+}
+.Polaris-IndexTable__TableCell.campaign {
+	width: 400px;
+}
+.customCampaign {
+	word-wrap: break-word;
+	display: block;
+	width: inherit;
+}
+.customDownload span.Polaris-Icon {
+    display: inline-flex;
+}
+.customDownload .Polaris-Icon__Svg, .Polaris-Icon__Img{
+	fill: #2463bc;
+	top: 6px;
+}
+.CustomBody .Polaris-Tag__TagText{
+	white-space: unset;
+}
+.customExport .Polaris-Frame {
+    min-height: unset;
+}
+
+table.CustomTable .Polaris-IndexTable__TableRow {
+	filter: drop-shadow(0 0 0 0) !important
+}
+.customInput {
+    position: relative;
+}
+
+.customInput #myFieldIDError {
+	 position: absolute; 
+	white-space: nowrap;
+	border: 1px solid red;
+	border-radius: 6px;
+	padding: 5px;
+	background-color: #fff;
+	border-radius: 1rem;
+  	box-shadow:	0 0.125rem 0.5rem rgba(255, 0, 0, .2), 0 0.0625rem 0.125rem rgba(255, 0, 0, .2);
+	padding: 10px 10px;
+	top: 50px;
+	left: 50px;
+	z-index: 99;
+}
+.customInput #myFieldIDError::before {
+	content: '';
+	position: absolute;
+	width: 0;
+	height: 0;
+	bottom: 100%;
+	left: 3em; 
+	border: .75rem solid transparent;
+	border-top: none;
+	border-bottom-color: #fff;
+	filter: drop-shadow(0 -0.0625rem 0.0625rem rgba(255, 0, 0));
+}
+.bulkEditForm span.Polaris-TextStyle--variationStrong {
+    display: flex;
+    justify-content: center;
+    float: none;
+}
+.priceRow button.Polaris-Button.Polaris-Button--fullWidth {
+    border: none;
+    box-shadow: none;
+}
+.priceRow .Polaris-Button:hover {
+    background: transparent;
+}

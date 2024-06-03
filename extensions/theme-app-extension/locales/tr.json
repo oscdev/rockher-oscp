@@ -1,0 +1,10 @@
+{  
+  "grid": {
+    "qty": "Adet",
+    "price": "Fiyat",
+    "buy": "Satın almak",
+    "each": "her biri",
+    "buyitnow": "Hemen satın alın",
+    "off": "Kapalı"
+  }
+}

@@ -1,0 +1,251 @@
+<div id="oscpPriceGridContainer">
+{%- assign cartRulesForAll = '' -%}
+{%- assign cartRulesForLoggedin = '' -%} 
+{%- assign cartRulesForTagged = '' -%} 
+
+{%- assign textEach = 'grid.each' | t -%}
+{%- assign textBuy = 'grid.buy' | t -%}
+{%- assign textOff = 'grid.off' | t -%}
+
+{% assign selected_variant = product.selected_variant.id %}
+{% if selected_variant == blank %}
+  {% assign selected_variant = product.variants[0].id %}
+{% endif %}
+{% assign selectedVariantId = selected_variant | times: 1 %}
+
+{% assign isVariantLevelPricing = false %}
+{%- for variant in product.variants -%}
+  {% if variant.metafields.oscp != blank %}
+    {% assign isVariantLevelPricing = true %} 
+  {%- endif -%}
+{%- endfor -%}
+
+ {%- for variant in product.variants -%}           
+    {% if selectedVariantId == variant.id %}
+      {%- for field in variant.metafields.oscp -%}
+          {%- if 
+            field.first contains 'rule1' or
+            field.first contains 'rule2' or
+            field.first contains 'rule3' or
+            field.first contains 'rule4' or
+            field.first contains 'rule5' or
+            field.first contains 'rule6' or
+            field.first contains 'rule7' or
+            field.first contains 'rule8' or
+            field.first contains 'rule9' or
+            field.first contains 'rule10' or
+            field.first contains 'rule11' or
+            field.first contains 'rule12' or
+            field.first contains 'rule13' or
+            field.first contains 'rule14' or
+            field.first contains 'rule15' or
+            field.first contains 'rule16' or
+            field.first contains 'rule17' or
+            field.first contains 'rule18' or
+            field.first contains 'rule19' or
+            field.first contains 'rule20' 
+          -%}          
+          {%- assign ruleLine = field | last -%}
+          {%- if ruleLine != blank -%}          
+            {%- assign validRule = false -%}          
+            {%- if cart.currency.iso_code contains ruleLine.value.currency -%}
+              {%- assign validRule = true -%}
+            {%- else -%}
+              {%- assign validRule = false -%}
+            {%- endif -%}
+            {%- if validRule == true and ruleLine.value.value == blank -%}
+              {%- assign validRule = false -%}
+              {%- endif -%}
+            {%- if validRule == true and ruleLine.value.qty == blank -%}
+                {%- assign validRule = false -%}
+            {%- endif -%}
+            {%- if validRule == true and ruleLine.value.status contains 'disable' -%}
+                {%- assign validRule = false -%}
+            {%- endif -%}
+            {%- if validRule == true and ruleLine.value.type == blank -%}
+                {%- assign validRule = false -%}
+            {%- endif -%} 
+            {%- if validRule -%} 
+              {%- assign ruleTag = ruleLine.value.customer | downcase -%}
+              {%- if customer -%}             
+                {%- assign customersTags = customer.tags | downcase -%}
+                {%- if customersTags contains ruleTag -%}   
+                  {% if ruleLine.value.type == 'discount' or ruleLine.value.type == 'percent'  %}
+                    {%- assign cartRulesForTagged = cartRulesForTagged | append: '<tr><td>' | append: textBuy | append: ' ' | append: ruleLine.value.qty | append : '</td><td>'  | append : ruleLine.value.value | append : ' %  ' | append: textOff | append : ' </td></tr>' -%}
+                  {%- else -%}
+                    {%- assign unitPrice = ruleLine.value.value | times:100 | money -%}
+                    {%- assign cartRulesForTagged = cartRulesForTagged | append: '<tr><td>' | append: textBuy | append: ' ' | append: ruleLine.value.qty | append : '</td><td>'  | append : unitPrice | append : ' ' | append : textEach | append : ' </td></tr>' -%}                    
+                  {%- endif -%}   
+                {%- else -%}
+                  {%- if ruleTag contains 'loggedin' -%}
+                    {% if ruleLine.value.type == 'discount' or ruleLine.value.type == 'percent'  %}
+                      {%- assign cartRulesForLoggedin = cartRulesForLoggedin | append: '<tr><td>' | append: textBuy | append: ' ' | append: ruleLine.value.qty | append : '</td><td>'  | append : ruleLine.value.value | append : ' %  ' | append: textOff | append : ' </td></tr>' -%}
+                    {%- else -%}
+                      {%- assign unitPrice = ruleLine.value.value | times:100 | money -%}
+                      {%- assign cartRulesForLoggedin = cartRulesForLoggedin | append: '<tr><td>' | append: textBuy | append: ' ' | append: ruleLine.value.qty | append : '</td><td>'  | append : unitPrice | append : ' ' | append : textEach | append : '</td></tr>' -%}
+                    {%- endif -%}
+                  {%- else -%}
+                    {%- if ruleTag contains 'all' -%} 
+                      {% if ruleLine.value.type == 'discount' or ruleLine.value.type == 'percent'  %}
+                        {%- assign cartRulesForAll = cartRulesForAll | append: '<tr><td>' | append: textBuy | append: ' ' | append: ruleLine.value.qty | append : '</td><td>'  | append : ruleLine.value.value | append : ' %  ' | append: textOff | append : ' </td></tr>' -%}
+                      {%- else -%}
+                        {%- assign unitPrice = ruleLine.value.value | times:100 | money -%}
+                        {%- assign cartRulesForAll = cartRulesForAll | append: '<tr><td>' | append: textBuy | append: ' ' | append: ruleLine.value.qty | append : '</td><td>'  | append : unitPrice | append : ' ' | append : textEach | append : ' </td></tr>' -%}
+                      {%- endif -%} 
+                    {%- endif -%}
+                  {%- endif -%}                  
+                {%- endif -%} 
+              {%- else -%}                
+                {%- if ruleTag contains 'all' -%}  
+                  {% if ruleLine.value.type == 'discount' or ruleLine.value.type == 'percent'  %}
+                      {%- assign cartRulesForAll = cartRulesForAll | append: '<tr><td>' | append: textBuy | append: ' ' | append: ruleLine.value.qty | append : '</td><td>'  | append : ruleLine.value.value | append : ' %  ' | append: textOff | append : ' </td></tr>' -%}
+                    {%- else -%}
+                      {%- assign unitPrice = ruleLine.value.value | times:100 | money -%}
+
+                      {%- assign cartRulesForAll = cartRulesForAll | append: '<tr><td>' | append: textBuy | append: ' ' | append: ruleLine.value.qty | append : '</td><td>'  | append : unitPrice | append : ' ' | append : textEach | append : ' </td></tr>' -%}
+                    {%- endif -%}                   
+                {%- endif -%} 
+              {%- endif -%} 
+            {%- endif -%}
+          {%- endif -%}
+        {%- endif -%}
+      {%- endfor -%}
+    
+      
+      {%- if cartRulesForAll == '' and cartRulesForTagged == '' and cartRulesForLoggedin == '' -%} 
+        {%- if isVariantLevelPricing == false -%}
+          {%- if app.metafields.oscpPriceRule != blank -%}
+            {%- for shopRule in app.metafields.oscpPriceRule.customPrice.value -%}
+              {%- assign validUser = true -%}
+              {%- if shopRule.config.userAccessibility[0] == 'loggedin' -%}
+                {%- if customer -%}
+                  {%- assign validUser = true -%}
+                {%- else -%}
+                  {%- assign validUser = false -%}
+                {%- endif -%}
+              {%- endif -%}
+              {%- if shopRule.config.userAccessibility[0] == 'specific' -%}
+                {%- assign isValidTag = false -%}
+                {%- if customer -%}
+                  {%- for userTag in shopRule.config.userTags -%}
+                    {%- assign customersTagsDowncased = customer.tags | downcase -%}
+                    {%- assign configTag = userTag.title | downcase -%}
+                    {%- if customersTagsDowncased contains configTag -%}
+                      {%- assign isValidTag = true -%}
+                      {%- break -%}
+                    {%- endif -%}
+                  {%- endfor -%}
+                  {%- if isValidTag -%}
+                    {%- assign validUser = true -%}
+                  {%- else -%}
+                    {%- assign validUser = false -%}
+                  {%- endif -%}
+                {%- else -%}
+                  {%- assign validUser = false -%}
+                {%- endif -%}
+              {%- endif -%}
+              {%- if validUser -%}
+                {%- if shopRule.config.status == 1 -%}
+                  {%- assign applicableProduct = false -%}
+                  {%- assign applicableCollection = false -%}
+                  {% comment %} //check product in shop metafield first {% endcomment %}
+                  {%- for ruleProduct in shopRule.products -%}
+                    {%- if ruleProduct.id contains product.id -%}
+                      {%- assign applicableProduct = true -%}
+                      {%- break -%}
+                    {%- endif -%}
+                  {%- endfor -%}
+                  {%- if applicableProduct == true -%}
+                    {% assign filterdRule = shopRule.mirrorRules %}
+                    {%- break -%}
+                  {%- endif -%}
+                  {% comment %} //check collection in shop metafield second   {% endcomment %}
+                  {%- for collection in product.collections -%}
+                    {%- for ruleCollection in shopRule.collections -%}
+                      {%- if ruleCollection.id contains collection.id -%}
+                        {%- assign applicableCollection = true -%}
+                        {%- break -%}
+                      {%- endif -%}
+                    {%- endfor -%}
+                  {%- endfor -%}
+                  {%- if applicableCollection == true -%}
+                    {% assign filterdRule = shopRule.mirrorRules %}
+                    {% break %}
+                  {%- endif -%}
+                {%- endif -%}
+              {% endif %}
+            {%- endfor -%}
+          {% else %}
+            {% assign filterdRule = '' %}  
+          {%- endif -%}
+          {% if filterdRule.size > 0 %}            
+                <table id="oscpPriceGrid">
+                  <tbody>
+                    <tr>
+                      <th>{{ 'grid.qty' | t  }}</th>
+                      <th>{{ 'grid.price' | t  }}</th>
+                    </tr>
+                    {% for info in filterdRule %}
+                      <tr>
+                        <td>{{ 'grid.buy' | t  }} {{ info.qty }}</td>
+                        {% if info.type == 'discount' %}
+                    <td>{{ info.value }} % {{ 'grid.off' | t  }}</td>
+                  {% elsif info.type == 'percent' %}
+                  <td>{{ info.value }} % {{ 'grid.off' | t  }}</td>
+                  {% else %}
+                    <td>{{ info.value | times:100 | money }} {{ 'grid.each' | t  }}</td>
+                  {% endif %}
+                      </tr>
+                    {% endfor %}
+                </tbody>
+                </table>
+              {% endif %}
+        {%- endif -%}
+      {%- else -%}
+        {%- assign filterRules = ''  -%}
+        {%- if cartRulesForTagged != '' -%}
+          {%- assign filterRules = cartRulesForTagged  -%}
+        {%- else -%}
+          {%- if cartRulesForLoggedin != '' -%}
+            {%- assign filterRules = cartRulesForLoggedin  -%}
+          {%- else -%}
+            {%- if cartRulesForAll != '' -%}
+              {%- assign filterRules = cartRulesForAll  -%}
+            {% endif %}
+          {% endif %}
+        {% endif %}
+        
+        {%- if filterRules != '' -%}          
+            <table id="oscpPriceGrid">
+              <tr>
+                <th>{{ 'grid.qty' | t  }}</th>
+                <th>{{ 'grid.price' | t  }}</th>
+              </tr>
+              <tbody>
+              {{ filterRules }}
+              </tbody>
+            </table>          
+        {% endif %}
+      {%- endif -%}  
+    {%- endif -%}                        
+  {%- endfor -%}  
+</div>      
+<style>
+  .cpw-quick-line-item-price {
+    display: none;
+  }
+  .CPW-priceLoaded .cpw-quick-line-item-price   {
+    display: block;
+  }
+</style>
+
+{% schema %}
+  {
+    "name": "Wholesale Price",
+    "target": "section",
+    "templates": ["product"],
+	"javascript": "app-product.js",
+	"available_if": "{{ app.metafields.app_settings.app_enabled }}",
+    "settings": []
+  }
+{% endschema %}

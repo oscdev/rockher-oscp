@@ -1,0 +1,501 @@
+{% comment %} Start Cart Rules {% endcomment %}
+{%- assign cartRulesData = '' -%}
+{%- assign cartRulesData = cartRulesData | append: '{' -%}
+{%- if cart.item_count > 0 -%} 
+        {%- for item in cart.items -%}
+
+          {% assign isVariantLevelPricing = false %}
+          {%- for variant in item.product.variants -%}
+            {% if variant.metafields.oscp != blank %}
+              {% assign isVariantLevelPricing = true %} 
+            {%- endif -%}
+          {%- endfor -%}
+
+          {%- assign cartRulesData = cartRulesData | append: '"' | append: item.product.id | append: '": [' -%}          
+            {%- for variant in item.product.variants -%}
+              {%- assign cartRulesForAll = '' -%}
+              {%- assign cartRulesForTagged = '' -%} 
+              {%- assign cartRulesForLoggedin = '' -%} 
+                {%- for field in variant.metafields.oscp -%}
+                  {%- if 
+                    field.first contains 'rule1' or
+                    field.first contains 'rule2' or
+                    field.first contains 'rule3' or
+                    field.first contains 'rule4' or
+                    field.first contains 'rule5' or
+                    field.first contains 'rule6' or
+                    field.first contains 'rule7' or
+                    field.first contains 'rule8' or
+                    field.first contains 'rule9' or
+                    field.first contains 'rule10' or
+                    field.first contains 'rule11' or
+                    field.first contains 'rule12' or
+                    field.first contains 'rule13' or
+                    field.first contains 'rule14' or
+                    field.first contains 'rule15' or
+                    field.first contains 'rule16' or
+                    field.first contains 'rule17' or
+                    field.first contains 'rule18' or
+                    field.first contains 'rule19' or
+                    field.first contains 'rule20' 
+                  -%}
+                    {%- assign ruleLine = field | last -%}
+                      {%- if ruleLine != blank -%} 
+                        {%- assign validRule = false -%}          
+                        {%- if cart.currency.iso_code contains ruleLine.value.currency -%}
+                          {%- assign validRule = true -%}
+                        {%- else -%}
+                          {%- assign validRule = false -%}
+                        {%- endif -%}
+                        {%- if validRule == true and ruleLine.value.value == blank -%}
+                          {%- assign validRule = false -%}
+                          {%- endif -%}
+                        {%- if validRule == true and ruleLine.value.qty == blank -%}
+                            {%- assign validRule = false -%}
+                        {%- endif -%}
+                        {%- if validRule == true and ruleLine.value.status contains 'disable' -%}
+                            {%- assign validRule = false -%}
+                        {%- endif -%}
+                        {%- if validRule == true and ruleLine.value.type == blank -%}
+                            {%- assign validRule = false -%}
+                        {%- endif -%} 
+                        {%- if validRule -%}  
+                          {%- assign ruleTag = ruleLine.value.customer | downcase -%}
+                          {%- if customer -%}                                                                              
+                            {%- assign customersTags = customer.tags | downcase -%}                                        
+                            {%- if customersTags contains ruleTag -%}                                                      
+                              {%- assign cartRulesForTagged = cartRulesForTagged | append: ruleLine | append: ',' -%}
+                            {%- else -%} 
+                              {%- if ruleTag contains 'loggedin' -%}
+                                {%- assign cartRulesForLoggedin = cartRulesForLoggedin | append: ruleLine | append: ',' -%}
+                              {%- else -%}
+                                {%- if ruleTag contains 'all' -%} 
+                                  {%- assign cartRulesForAll = cartRulesForAll | append: ruleLine | append: ',' -%}
+                                {%- endif -%}
+                              {%- endif -%}
+                            {%- endif -%} 
+                          {%- else -%}
+                            {%- if ruleTag contains 'all' -%}                                                               
+                              {%- assign cartRulesForAll = cartRulesForAll | append: ruleLine | append: ',' -%}
+                            {%- endif -%} 
+                          {%- endif -%} 
+                        {%- endif -%}
+                      {%- endif -%}
+                  {%- endif -%}            
+                {%- endfor -%}
+                {%- if cartRulesForAll == '' and cartRulesForTagged == '' and cartRulesForLoggedin == '' -%}
+                  {%- if isVariantLevelPricing == false -%}
+                    {% if app.metafields.oscpPriceRule != blank %}
+                      {%- for shopRule in app.metafields.oscpPriceRule.customPrice.value -%}
+                        {% assign validUser = true %}
+                        {% if shopRule.config.userAccessibility[0] == 'loggedin' %}
+                          {% if customer %}
+                            {% assign validUser = true %}
+                          {% else %}
+                            {% assign validUser = false %}
+                          {% endif %}
+                        {% endif %}
+                        {% if shopRule.config.userAccessibility[0] == 'specific' %}
+                          {% assign isValidTag = false %}
+                          {% if customer %}
+                            {%- for userTag in shopRule.config.userTags -%}
+                              {% assign customersTagsDowncased = customer.tags | downcase %}
+                              {% assign configTag = userTag.title | downcase %}
+                              {% if customersTagsDowncased contains configTag %}
+                                {% assign isValidTag = true %}
+                                {% break %}
+                              {% endif %}
+                            {%- endfor -%}
+                            {% if isValidTag %}
+                              {% assign validUser = true %}
+                            {% else %}
+                              {% assign validUser = false %}
+                            {% endif %}
+                          {% else %}
+                            {% assign validUser = false %}
+                          {% endif %}
+                        {% endif %}
+                        {% if validUser %}
+                          {% if shopRule.config.status == 1 %}
+                            {% assign applicableProduct = false %}
+                            {% assign applicableCollection = false %}
+                            {% comment %} //check product in shop metafield first {% endcomment %}
+                            {%- for ruleProduct in shopRule.products -%}
+                              {% if ruleProduct.id contains item.product_id %}
+                                {% assign applicableProduct = true %}
+                                {% break %}
+                              {% endif %}
+                            {%- endfor -%}
+                            {% if applicableProduct == true %}  
+                              {% assign shopMirrorRules = shopRule.mirrorRules | json %}
+                              {%- assign cartRulesData = cartRulesData | append: '{"id" : "' | append: variant.id | append: '", "rules" :' | append: shopMirrorRules | append: '},' -%}                            
+                              {% break %}
+                            {% endif %}
+                            {% comment %} //check collection in shop metafield second   {% endcomment %}
+                            {% for collection in item.product.collections %}
+                              {% for ruleCollection in shopRule.collections -%}
+                                {% if ruleCollection.id contains collection.id %}
+                                  {% assign applicableCollection = true %}
+                                  {% break %}
+                                {% endif %}
+                              {% endfor %}
+                            {% endfor %}
+                            {% if applicableCollection == true %}
+                              {% assign shopMirrorRules = shopRule.mirrorRules | json %}
+                              {%- assign cartRulesData = cartRulesData | append: '{"id" : "' | append: variant.id | append: '", "rules" :' | append: shopMirrorRules | append: '},' -%} 
+                              {% break %}
+                            {% endif %}
+                          {% endif %}
+                        {% endif %}
+                      {%- endfor -%}
+                    {% else %}
+                      {%- assign cartRulesData = cartRulesData | append: '{"id" : "' | append: item.product_id | append: '", "rules" : []},' -%} 
+                    {% endif %}
+                  {% else %}
+                    {%- assign cartRulesData = cartRulesData | append: '{"id" : "' | append: item.product_id | append: '", "rules" : []},' -%}
+                  {% endif %}
+                {%- else -%}
+                  {%- assign cartFilterRules = ''  -%}
+                  {%- if cartRulesForTagged != '' -%}
+                    {%- assign cartFilterRules = cartRulesForTagged  -%}
+                  {%- else -%}
+                    {%- if cartRulesForLoggedin != '' -%}
+                      {%- assign cartFilterRules = cartRulesForLoggedin  -%}
+                    {%- else -%}
+                      {%- if cartRulesForAll != '' -%}
+                        {%- assign cartFilterRules = cartRulesForAll  -%}
+                      {% endif %}
+                    {% endif %}
+                  {% endif %}                
+                  {%- if cartFilterRules != '' -%}
+                    {%- assign cartRulesData = cartRulesData | append: '{"id" : "' | append: variant.id | append: '", "rules" : [' | append: cartFilterRules | append: ']},' -%}
+                  {%- else -%}
+                    {%- assign cartRulesData = cartRulesData | append: '{"id" : "' | append: variant.id | append: '", "rules" : []},' -%}
+                  {% endif %} 
+                {%- endif -%}                            
+            {%- endfor -%}
+            {%- assign cartRulesData = cartRulesData | append: '],' -%}
+        {%- endfor -%}
+{%- endif -%} 
+
+      {%- assign cartRulesData = cartRulesData | append: '}' -%}      
+
+      {% assign cartRulesData = cartRulesData | strip %}
+      {% assign cartRulesData = cartRulesData | replace: '\n', '' %}
+      {% assign cartRulesData = cartRulesData | replace: '\t', '' %}
+      {% assign cartRulesData = cartRulesData | replace: '\r', '' %}   
+      {% assign cartRulesData = cartRulesData | replace: "  ", "" %}
+      {% assign cartRulesData = cartRulesData | replace: ',,', ',' %}  
+      {% assign cartRulesData = cartRulesData | replace: '},}', '}}' %} 
+      {% assign cartRulesData = cartRulesData | replace: '},]', '}]' %}    
+      {% assign cartRulesData = cartRulesData | replace: '},  ]', '}]' %}    
+      {% assign cartRulesData = cartRulesData | replace: '}, ]', '}]' %}
+      {% assign cartRulesData = cartRulesData | replace: ',]', ']' %}
+      {% assign cartRulesData = cartRulesData | replace: '[ ,', '[' %}
+      {% assign cartRulesData = cartRulesData | replace: '],}', ']}' %} 
+      {% assign cartRulesData = cartRulesData | replace: ',"currency":"USD"', '' %}
+      {% assign cartRulesData = cartRulesData | replace: ',"currency":"CAD"', '' %}
+      {% assign cartRulesData = cartRulesData | strip %}
+    
+
+
+{% comment %} JSON for cartRules {% endcomment %}
+
+{% comment %} End Cart Rules {% endcomment %}
+
+{%- if template contains 'product' -%}
+  {%- assign variantRules = '[' -%}  
+
+  {% assign isVariantLevelPricing = false %}
+  {%- for variant in product.variants -%}
+    {% if variant.metafields.oscp != blank %}
+      {% assign isVariantLevelPricing = true %} 
+    {%- endif -%}
+  {%- endfor -%}
+
+         {%- for variant in product.variants -%}           
+            {%- assign cartRulesForAll = '' -%}
+            {%- assign cartRulesForTagged = '' -%}
+            {%- assign cartRulesForLoggedin = '' -%}
+            
+            {%- for field in variant.metafields.oscp -%}
+                  {%- if 
+                    field.first contains 'rule1' or
+                    field.first contains 'rule2' or
+                    field.first contains 'rule3' or
+                    field.first contains 'rule4' or
+                    field.first contains 'rule5' or
+                    field.first contains 'rule6' or
+                    field.first contains 'rule7' or
+                    field.first contains 'rule8' or
+                    field.first contains 'rule9' or
+                    field.first contains 'rule10' or
+                    field.first contains 'rule11' or
+                    field.first contains 'rule12' or
+                    field.first contains 'rule13' or
+                    field.first contains 'rule14' or
+                    field.first contains 'rule15' or
+                    field.first contains 'rule16' or
+                    field.first contains 'rule17' or
+                    field.first contains 'rule18' or
+                    field.first contains 'rule19' or
+                    field.first contains 'rule20' 
+                  -%}
+                  {%- assign ruleLine = field | last -%}
+                  {%- if ruleLine != blank -%} 
+                    {%- assign validRule = false -%}          
+                    {%- if cart.currency.iso_code contains ruleLine.value.currency -%}
+                      {%- assign validRule = true -%}
+                    {%- else -%}
+                      {%- assign validRule = false -%}
+                    {%- endif -%}
+                    {%- if validRule == true and ruleLine.value.value == blank -%}
+                      {%- assign validRule = false -%}
+                      {%- endif -%}
+                    {%- if validRule == true and ruleLine.value.qty == blank -%}
+                        {%- assign validRule = false -%}
+                    {%- endif -%}
+                    {%- if validRule == true and ruleLine.value.status contains 'disable' -%}
+                        {%- assign validRule = false -%}
+                    {%- endif -%}
+                    {%- if validRule == true and ruleLine.value.type == blank -%}
+                        {%- assign validRule = false -%}
+                    {%- endif -%} 
+                    {%- if validRule -%}  
+                      {%- assign ruleTag = ruleLine.value.customer | downcase -%}
+                      {%- if customer -%}             
+                        {%- assign customersTags = customer.tags | downcase -%}
+                        {%- if customersTags contains ruleTag -%}
+                          {%- assign cartRulesForTagged = cartRulesForTagged | append: ruleLine | append: ',' -%}                          
+                        {%- else -%}
+                          {%- if ruleTag contains 'loggedin' -%}
+                            {%- assign cartRulesForLoggedin = cartRulesForLoggedin | append: ruleLine | append: ',' -%}                            
+                          {%- else -%}
+                            {%- if ruleTag contains 'all' -%} 
+                              {%- assign cartRulesForAll = cartRulesForAll | append: ruleLine | append: ',' -%} 
+                            {%- endif -%}
+                          {%- endif -%}
+                        {%- endif -%} 
+                      {%- else -%}
+                        {%- if ruleTag contains 'all' -%}  
+                          {%- assign cartRulesForAll = cartRulesForAll | append: ruleLine | append: ',' -%}
+                        {%- endif -%} 
+                      {%- endif -%} 
+                    {%- endif -%}
+                  {%- endif -%}
+                {%- endif -%}
+              {%- endfor -%}
+              {%- if cartRulesForAll == '' and cartRulesForTagged == '' and cartRulesForLoggedin == '' -%} 
+                {%- if isVariantLevelPricing == false -%}
+                  {%- if app.metafields.oscpPriceRule != blank -%}
+                    {%- for shopRule in app.metafields.oscpPriceRule.customPrice.value -%}
+                      {%- assign validUser = true -%}
+                      {%- if shopRule.config.userAccessibility[0] == 'loggedin' -%}
+                        {%- if customer -%}
+                          {%- assign validUser = true -%}
+                        {%- else -%}
+                          {%- assign validUser = false -%}
+                        {%- endif -%}
+                      {%- endif -%}
+                      {%- if shopRule.config.userAccessibility[0] == 'specific' -%}
+                        {%- assign isValidTag = false -%}
+                        {%- if customer -%}
+                          {%- for userTag in shopRule.config.userTags -%}
+                            {%- assign customersTagsDowncased = customer.tags | downcase -%}
+                            {%- assign configTag = userTag.title | downcase -%}
+                            {%- if customersTagsDowncased contains configTag -%}
+                              {%- assign isValidTag = true -%}
+                              {%- break -%}
+                            {%- endif -%}
+                          {%- endfor -%}
+                          {%- if isValidTag -%}
+                            {%- assign validUser = true -%}
+                          {%- else -%}
+                            {%- assign validUser = false -%}
+                          {%- endif -%}
+                        {%- else -%}
+                          {%- assign validUser = false -%}
+                        {%- endif -%}
+                      {%- endif -%}
+                      {%- if validUser -%}
+                        {%- if shopRule.config.status == 1 -%}
+                          {%- assign applicableProduct = false -%}
+                          {%- assign applicableCollection = false -%}
+                          {% comment %} //check product in shop metafield first {% endcomment %}
+                          {%- for ruleProduct in shopRule.products -%}
+                            {%- if ruleProduct.id contains product.id -%}
+                              {%- assign applicableProduct = true -%}
+                              {%- break -%}
+                            {%- endif -%}
+                          {%- endfor -%}
+                          {%- if applicableProduct == true -%}
+                            {% assign shopMirrorRules = shopRule.mirrorRules | json %}
+                            {%- assign variantRules = variantRules | append: '{"id" : "' | append: variant.id | append: '", "rules" :' | append: shopMirrorRules | append: '},' -%} 
+                            {%- break -%}
+                          {%- endif -%}
+                          {% comment %} //check collection in shop metafield second   {% endcomment %}
+                          {%- for collection in product.collections -%}
+                            {%- for ruleCollection in shopRule.collections -%}
+                              {%- if ruleCollection.id contains collection.id -%}
+                                {%- assign applicableCollection = true -%}
+                                {%- break -%}
+                              {%- endif -%}
+                            {%- endfor -%}
+                          {%- endfor -%}
+                          {%- if applicableCollection == true -%}
+                            {% assign shopMirrorRules = shopRule.mirrorRules | json %}
+                            {%- assign variantRules = variantRules | append: '{"id" : "' | append: variant.id | append: '", "rules" :' | append: shopMirrorRules | append: '},' -%}
+                            {% break %}
+                          {%- endif -%}
+                        {%- endif -%}
+                      {% endif %}
+                    {%- endfor -%}
+                  {%- endif -%}
+                {%- endif -%}
+              {%- else -%}                
+                {%- assign cartFilterRules = ''  -%}
+                {%- if cartRulesForTagged != '' -%}
+                  {%- assign cartFilterRules = cartRulesForTagged  -%}
+                {%- else -%}
+                  {%- if cartRulesForLoggedin != '' -%}
+                    {%- assign cartFilterRules = cartRulesForLoggedin  -%}
+                  {%- else -%}
+                    {%- if cartRulesForAll != '' -%}
+                      {%- assign cartFilterRules = cartRulesForAll  -%}
+                    {% endif %}
+                  {% endif %}
+                {% endif %}                
+                {%- if cartFilterRules != '' -%}
+                  {%- assign variantRules = variantRules | append: '{"id" : "' | append: variant.id | append: '", "rules" : [' | append: cartFilterRules | append: ']},' -%}
+                {%- else -%}
+                  {%- assign variantRules = variantRules | append: '{"id" : "' | append: variant.id | append: '", "rules" : []},' -%}
+                {% endif %}                
+              {%- endif -%}                        
+          {%- endfor -%}  
+      {%- assign variantRules = variantRules | append: ']' -%}
+
+  {% assign variantRules = variantRules | strip %}
+  {% assign variantRules = variantRules | replace: "\n", "" %}
+  {% assign variantRules = variantRules | replace: '\t', '' %}
+  {% assign variantRules = variantRules | replace: '\r', '' %}   
+  {% assign variantRules = variantRules | replace: "  ", "" %}
+  {% assign variantRules = variantRules | replace: ',,', ',' %}  
+  {% assign variantRules = variantRules | replace: '},}', '}}' %} 
+  {% assign variantRules = variantRules | replace: '},]', '}]' %}    
+  {% assign variantRules = variantRules | replace: '},  ]', '}]' %}    
+  {% assign variantRules = variantRules | replace: '}, ]', '}]' %}
+  {% assign variantRules = variantRules | replace: ',]', ']' %}
+  {% assign variantRules = variantRules | replace: '[ ,', '[' %}
+  {% assign variantRules = variantRules | replace: '],}', ']}' %} 
+  {% assign variantRules = variantRules | replace: ',"currency":"USD"', '' %}
+  {% assign variantRules = variantRules | replace: ',"currency":"CAD"', '' %}
+  {% assign variantRules = variantRules | strip %}
+{%- endif -%}
+
+<script type="text/oscpAppSetting">
+  oscpCPWAppConfig = {
+    "cart" : {{ cart | json }},
+    "cartRule" : {{ cartRulesData| json }},
+    "priceGrid" : {{ variantRules | json }},
+    "product" : {{ product | json }},
+    "page" : "{{ template }}",
+    "priceTemplate": "{{ 0 | money_without_trailing_zeros }}",
+    "eleLineItemTotal": "{{ block.settings.ele-line-item-total }}",
+    "eleLineItemPrice": "{{ block.settings.ele-line-item-price }}",
+    "eleCartItemTotal": "{{ block.settings.ele-cart-item-total }}",
+    "eleCartContainer": "{{ block.settings.ele-cart-container }}",
+    "eleQtyInput": "{{ block.settings.ele-qty-input }}",
+    "eleCheckoutBtn": "{{ block.settings.ele-checkout-btn }}",
+    "eleBuyNowBtn": "{{ block.settings.ele-buy-now-btn }}",
+    "eleProductAddToCart": "{{ block.settings.ele-product-add-to-cart }}",
+    "eleCartRemoveButton": "{{ block.settings.ele-cart-remove-button }}",
+    "secret" : "{{shop.domain | md5}}",
+    "locales" : {
+      "grid" : {
+        "qty" : "{{ 'grid.qty' | t }}",
+        "price" : "{{ 'grid.price' | t }}",
+        "buy" : "{{ 'grid.buy' | t }}",
+        "each" : "{{ 'grid.each' | t }}",
+        "buyitnow": "{{ 'grid.buyitnow' | t }}",
+        "off": "{{ 'grid.off' | t }}"
+      }
+    }
+  };
+</script>
+
+{% schema %}
+{
+  "name": "Wholesale Price",
+  "target": "head",
+  "stylesheet": "app.css",
+  "javascript": "app.js",
+  "available_if": "{{ app.metafields.app_settings.app_enabled }}",
+  "settings":  [
+	 {
+      "type":"header",
+       "content": "Product Settings"
+     },
+     {
+		"id": "ele-product-add-to-cart",
+		"type": "text",
+		"label": "Add To Cart button",
+		"default": ".product-form__submit",
+		"info":"HTML reference (ID or class) for Add to cart button on the Product page"
+	  },
+     {
+		"id": "ele-buy-now-btn",
+		"type": "text",
+		"label": "Buy Now Button",
+		"default": ".customBuyNow",
+		"info":"HTML reference (ID or class) for Buy Now button on the product page"
+	},
+  {
+      "type":"header",
+       "content": "Cart Settings"
+     },
+	{
+		"id": "ele-line-item-total",
+		"type": "text",
+		"label": "Line item price total",
+		"default": ".price--end",
+		"info":"HTML reference (ID or class) for Total Discounted price of the product on the Cart page"
+	},{
+		"id": "ele-line-item-price",
+		"type": "text",
+		"label": "Line item price",
+		"default": "div.product-option",
+		"info":"HTML reference (ID or class) for Original price of the product on the Cart page"
+	},{
+		"id": "ele-cart-item-total",
+		"type": "text",
+		"label": "Cart Total",
+		"default": ".totals__subtotal-value, .totals__total-value",
+		"info":"HTML reference (ID or class) for Subtotal price (after discount) on the cart page"
+	},
+  {
+		"id": "ele-cart-container",
+		"type": "text",
+		"label": "Cart container",
+		"default": ".cart-item",
+		"info":"HTML reference (ID or class) for main element of the Cart page"
+	},{
+		"id": "ele-qty-input",
+		"type": "text",
+		"label": "Cart Quantity Input",
+		"default": ".quantity__input",
+		"info":"HTML reference (ID or class) for Quantity of product on the Cart page"
+	},{
+		"id": "ele-checkout-btn",
+		"type": "text",
+		"label": "Checkout Button",
+		"default": "#checkout, #CartDrawer-Checkout",
+		"info":"HTML reference (ID or class) for Checkout button on the Cart Page and Cart Drawer"
+	},{
+		"id": "ele-cart-remove-button",
+		"type": "text",
+		"label": "Remove Button",
+		"default": ".cart-remove-button",
+		"info":"HTML reference (ID or class) for Remove (Product) button on the Cart Page"
+	}]
+}
+{% endschema %}

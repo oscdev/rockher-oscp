@@ -1,0 +1,10 @@
+{  
+  "grid": {
+    "qty": "Số lượng",
+    "price": "Giá",
+    "buy": "Mua",
+    "each": "mỗi",
+    "buyitnow": "Mua ngay",
+    "off": "Tắt"
+  }
+}

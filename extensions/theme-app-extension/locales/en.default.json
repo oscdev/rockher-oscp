@@ -1,0 +1,10 @@
+{  
+  "grid": {
+    "qty": "Qty",
+    "price": "Price",
+    "buy": "Buy",
+    "each": "each",
+    "buyitnow": "Buy it now",
+    "off": "Off"
+  }
+}

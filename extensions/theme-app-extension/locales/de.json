@@ -1,0 +1,10 @@
+{  
+  "grid": {
+    "qty": "Anzahl",
+    "price": "Preis",
+    "buy": "Kaufen",
+    "each": "jede",
+    "buyitnow": "Jetzt zum Checkout",
+    "off": "Aus"
+  }
+}
