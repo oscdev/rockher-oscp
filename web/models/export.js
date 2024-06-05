@@ -12,6 +12,15 @@ export const modelExport = {
 	getExportOperationList: async function(req, res){
 		return await bdModelExport.getExportOperationList(req, res)
 	},
+	getCollectionData: async function(get_collection_id){
+		return await bdModelExport.getCollectionData(get_collection_id)
+	},
+	getCollectionDataBackup: async function(get_collection_id){
+		return await bdModelExport.getCollectionDataBackup(get_collection_id)
+	},
+	getCollectionID: async function(req, res){
+		return await bdModelExport.getCollectionID(req, res)
+	},
 	insertRunnerData: async function(data, req, res){
 		return await bdModelExport.insertRunnerData(data, req, res)
 	},
@@ -27,11 +36,10 @@ export const modelExport = {
 	operationStatusUpdate: async function(operationId, shopName){
 		return await bdModelExport.operationStatusUpdate(operationId, shopName)
 	},
+	collectionStatusUpdate: async function(collectionID,status){
+		return await bdModelExport.collectionStatusUpdate(collectionID,status)
+	},
 	operationErrorStatusUpdate: async function(operationId, shopName){
 		return await bdModelExport.operationErrorStatusUpdate(operationId, shopName)
 	}
-
-	/*getBulkDataFileUrl: async function(data){
-		return await apiModelExport.getBulkDataFileUrl(data)
-	},*/
 }
