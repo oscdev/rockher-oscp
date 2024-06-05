@@ -130,6 +130,7 @@ export const QL = {
 		shop {
 		  name
 		  ianaTimezone
+		  email
 		}
 	}`,
 	POLL_ERROR : `query {
@@ -220,4 +221,244 @@ export const QL = {
 			}
 		}
 	}`,
+	APP_SETTING_GET_MUTATION: `query {
+		currentAppInstallation{
+			id
+			metafields(first: 100) {
+				nodes{
+					namespace
+					key
+					type
+					value
+				}
+			}
+		}
+	} `,
+	APP_REGISTRATION_GET_MUTATION : `query {
+		currentAppInstallation{
+			id
+			form: metafield(namespace: "app_settings", key: "registractionForm"){
+				value
+			}
+		}
+	}`,
+	APP_NOTIFICATION_GET_MUTATION : `query {
+		currentAppInstallation{
+			id
+			notifications: metafield(namespace: "app_settings", key: "notifications"){
+				value
+			}
+		}
+	}`,
+	APP_SETTING_SET_MUTATION: `mutation CreateAppDataMetafield($metafieldsSetInput: [MetafieldsSetInput!]!) {
+		metafieldsSet(metafields: $metafieldsSetInput) {
+		  metafields {
+			id
+			namespace
+			key,
+			value
+		  }
+		  userErrors {
+			field
+			message
+		  }
+		}
+	  }`,
+	  CUSTOMER_SEGMENT_MEMBERS : `{
+		customerSegmentMembers(first: 50, query: "$QUERY") {
+		  edges {
+			node {
+			  id
+			  firstName
+			  lastName
+			  email: defaultEmailAddress{
+				emailAddress
+			  }
+			  metafield(namespace: "segment", key: "assigned"){
+				id
+			  }
+			  status: metafield(namespace: "segment", key: "status"){
+				  value
+				  id
+			  }
+			}
+		  }
+		}
+	  }`,
+
+	  CUSTOMERS : `{
+		customers(first: 200, query: "$QUERY") {
+		  edges{
+			node{
+			  firstName
+			  lastName
+			  email
+			  id
+			  metafield(namespace: "segment", key: "assigned"){
+				value
+			  }
+			}
+		  }
+		}
+	  }`,
+
+	  UPDATE_CUSTOMER_METAFIELDS : `mutation updateCustomerMetafields($input: CustomerInput!) {
+		customerUpdate(input: $input) {
+		  customer {
+			id
+			metafield(namespace: "segment", key: "assigned"){
+				id
+			}
+		  }
+		  userErrors {
+			message
+			field
+		  }
+		}
+	  }`,
+	  DELETE_CUSTOMER_METAFIELDS : `mutation metafieldDelete($input: MetafieldDeleteInput!) {
+		metafieldDelete(input: $input) {
+		  deletedId
+		  userErrors {
+			field
+			message
+		  }
+		}
+	  }`,
+	  CREATE_METAFIELD_DEFINITION: `mutation CreateMetafieldDefinition($definition: MetafieldDefinitionInput!) {
+		metafieldDefinitionCreate(definition: $definition) {
+		  createdDefinition {
+			id
+			name
+			namespace
+			key      
+		  }
+		  userErrors {
+			field
+			message
+			code
+		  }
+		}
+	  }`,
+	  SET_CREATE_WEBHOOK_SUBSCRIPTION_CREATE: `mutation webhookSubscriptionCreate($topic: WebhookSubscriptionTopic!, $webhookSubscription: WebhookSubscriptionInput!) {
+		webhookSubscriptionCreate(topic: $topic, webhookSubscription: $webhookSubscription) {
+		  webhookSubscription {
+			id
+			topic
+			format
+			endpoint {
+			  __typename
+			  ... on WebhookHttpEndpoint {
+				callbackUrl
+			  }
+			}
+		  }
+		}
+	  }`,
+	  GET_WEBHOOK_SUBSCRIPTION: `query {
+		webhookSubscriptions(first: 10) {
+		  edges {
+			node {
+			  id
+			  topic
+			  endpoint {
+				__typename
+				... on WebhookHttpEndpoint {
+				  callbackUrl
+				}
+				... on WebhookEventBridgeEndpoint {
+				  arn
+				}
+				... on WebhookPubSubEndpoint {
+				  pubSubProject
+				  pubSubTopic
+				}
+			  }
+			}
+		  }
+		}
+	  }`,
+	  SET_CREATE_CUSTOMER: `mutation customerCreate($input: CustomerInput!) {
+		customerCreate(input: $input) {
+		  userErrors {
+			field
+			message
+		  }
+		  customer {
+			id
+			email
+			phone
+			taxExempt
+			acceptsMarketing
+			firstName
+			lastName
+			smsMarketingConsent {
+			  marketingState
+			  marketingOptInLevel
+			}
+			addresses {
+			  address1
+			  city
+			  country
+			  phone
+			  zip
+			}
+		  }
+		}
+	  }`,
+	  BULK_QUERY_GET_COLLECTION: `mutation {
+		bulkOperationRunQuery(
+		  query: """
+		  {
+			collections {
+			  edges {
+				node {
+				  id
+				  title
+				  handle
+				  updatedAt
+				  productsCount
+				  products(first: 250) {
+					edges {
+					  node {
+						id
+						title
+						handle
+						vendor
+						productType
+						tags
+						variants(first: 250) {
+						  edges {
+							node {
+							  id
+							  sku
+							  price
+							  compareAtPrice
+							  inventoryQuantity
+							  weight
+							  weightUnit
+							  requiresShipping
+							  taxable
+							}
+						  }
+						}
+					  }
+					}
+				  }
+				}
+			  }
+			}
+		  }
+		  """
+		) {
+		  bulkOperation {
+			id
+			status
+		  }
+		  userErrors {
+			field
+			message
+		  }
+		}
+	  }`,
 }

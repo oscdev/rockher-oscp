@@ -154,7 +154,7 @@ export function Dashboard(props) {
 			</Layout.Section>		
 		</Layout>
 		<br/>
-		{/* <div className="customExport">		
+		{<div className="customExport">		
 		<Layout>
 			<Layout.Section oneHalf>
 				<Import/>
@@ -163,8 +163,8 @@ export function Dashboard(props) {
 				<Export/>
 			</Layout.Section>
 		</Layout> 
-		</div> */}
-</Page>
+		</div>}
+		</Page>
 		</div>
 
   );

@@ -14,8 +14,18 @@ export function variantExportRoutes(app) {
 	 * @returns In res  (affected rows and inserted row count)
 	 */
 	app.get(`${shopEndpoint}`, async (req, res) => { //Create new request for export variant rules
-		const dataExport = await exportVariantRuleData.requestOperation(req, res);
-		res.status(200).send(dataExport);
+		/* new Collection product position update */
+		const dataExport = await exportVariantRuleData.generateCollectionsCSV(req, res);
+		// const collectionUpdate = await exportVariantRuleData.getCollection(req, res);
+		/*  END Collection product position update */
+
+		/* Collection Backup Plan */
+		// Node When Create the sql file for product collection the last product will not be added in the sql file (generateCollectionsCSVBackup)
+		// const dataExport = await exportVariantRuleData.generateCollectionsCSVBackup(req, res);
+		// const dataExport = await exportVariantRuleData.getCollectionBackup(req, res);
+		// const dataExport = await exportVariantRuleData.createBackupProductCollectionSQL(req, res);
+		/* END Collection Backup Plan */	
+		res.status(200).send("Collection Update Successfully");
 	});
 
 	/**
@@ -40,7 +50,6 @@ export function variantExportRoutes(app) {
 	 */
 	app.get(`${shopEndpoint}/cron/upload-incomplete-operations`, async (req, res) => {
 		const dataExportList = await exportVariantRuleData.ProcessSqlFileToDB();
-
 		res.status(200).send(dataExportList);
 	});
 

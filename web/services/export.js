@@ -3,17 +3,610 @@ import { writeFile, promises, createReadStream, createWriteStream, readdir, read
 import path from "path"
 import { modelExport, modelCronLock } from "../models/index.js";
 import { exec, spawn } from 'child_process';
-//import util from "util"
 import { EventEmitter } from "events";
 import mysql from "mysql2";
 import { cnf } from "../cnf.js";
-import { globalSession } from "../helpers/global-session.js"
 import { writeToPath } from "fast-csv";
 import { Shopify } from "@shopify/shopify-api";
+const USE_ONLINE_TOKENS = false;
+import { createObjectCsvWriter } from 'csv-writer';
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
+import fs from 'fs';
+import fetch from 'node-fetch';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 
 export const exportVariantRuleData = {
 
+
+	/* Purpose: This Function is used to the get all the product collection data with metafields sku */
+	generateCollectionsCSV: async function (req, res) {
+		const session = await Shopify.Utils.loadCurrentSession(req, res, USE_ONLINE_TOKENS);
+		const client = new Shopify.Clients.Graphql(session.shop, session.accessToken);
+
+		const fetchCollectionsQuery = `
+			{
+				collections(first: 250) {
+					edges {
+						node {
+							id
+						}
+					}
+				}
+			}
+		`;
+
+		const fetchCollectionsResponse = await client.query({
+			data: {
+				query: fetchCollectionsQuery
+			}
+		});
+
+		const allCollectionIds = fetchCollectionsResponse.body.data.collections.edges.map(edge => edge.node.id);
+		console.log('All Collection IDs:', allCollectionIds);
+
+		for (const collectionId of allCollectionIds) {
+			try {
+				// Build the GraphQL query for the current collection
+				const bulkQuery = `
+					{
+						collection(id: "${collectionId}") {
+							id
+							title
+							products(first: 250) {
+								edges {
+									node {
+										id
+										title
+										metafields(first: 250) {
+											edges {
+												node {
+													id
+													key
+													value
+													namespace
+												}
+											}
+										}
+									}
+								}
+							}
+						}
+					}
+				`;
+
+				// Execute the bulk operation for this collection
+				const startBulkOperation = await client.query({
+					data: {
+						query: `mutation {
+							bulkOperationRunQuery(
+								query: """
+								${bulkQuery}
+								"""
+							) {
+								bulkOperation {
+									id
+									status
+								}
+								userErrors {
+									field
+									message
+								}
+							}
+						}`
+					},
+				});
+				const startBulkOperationResponse = startBulkOperation.body.data.bulkOperationRunQuery;
+				console.log("startBulkOperationResponse", startBulkOperationResponse)
+				if (startBulkOperationResponse.userErrors.length > 0) {
+					throw new Error(`Bulk operation initiation failed for collection: ${collectionId}`);
+				}
+
+				const bulkOperationId = startBulkOperationResponse.bulkOperation.id;
+
+				// Polling the status of the bulk operation
+				let bulkOperationStatus = { status: 'RUNNING' };
+				while (bulkOperationStatus.status === 'RUNNING' || bulkOperationStatus.status === 'CREATED') {
+					await new Promise(resolve => setTimeout(resolve, 2000)); // Wait for 2 seconds before polling again
+
+					const statusResponse = await client.query({
+						data: {
+							query: `
+								{
+									node(id: "${bulkOperationId}") {
+										... on BulkOperation {
+											status
+											errorCode
+											createdAt
+											completedAt
+											objectCount
+											fileSize
+											url
+										}
+									}
+								}
+							`,
+						},
+					});
+
+					bulkOperationStatus = statusResponse.body.data.node;
+				}
+
+				if (bulkOperationStatus.status !== 'COMPLETED') {
+					console.error(`Bulk operation failed for collection: ${collectionId}`);
+					continue; // Skip to the next collection if this one fails
+				}
+
+				// Download the result file and parse the data
+				const response = await fetch(bulkOperationStatus.url);
+				const jsonlData = await response.text();
+
+				// Split the JSONL data into individual lines and parse each line to JSON
+				const jsonlLines = jsonlData.split('\n').filter(line => line.trim().length > 0);
+				const updatedJsonlLines = [];
+				updatedJsonlLines.push(JSON.stringify({ id: collectionId })); // Add the collection ID as the first entry
+
+				jsonlLines.forEach(line => {
+					const jsonObject = JSON.parse(line);
+					jsonObject.collectionId = collectionId; // Add the collection ID to the JSON object
+					updatedJsonlLines.push(JSON.stringify(jsonObject));
+				});
+				const updatedJsonlData = updatedJsonlLines.join('\n');
+
+				const sanitizedCollectionId = collectionId.replace(/[^a-z0-9]/gi, '_').toLowerCase(); // Sanitize collection ID for filenames
+				const fileName = `collection-${sanitizedCollectionId}.jsonl`;
+				const logFilePath = path.join(__dirname, '..', 'storage', 'raw', fileName);
+
+				// Ensure directory exists before writing file
+				const logDir = path.dirname(logFilePath);
+				if (!fs.existsSync(logDir)) {
+					fs.mkdirSync(logDir, { recursive: true });
+				}
+
+				fs.writeFileSync(logFilePath, updatedJsonlData);
+
+				const dataFile = logFilePath;
+				const dataSQLFile = `${process.cwd()}/storage/sql/${fileName}.sql`;
+				const dataErrorFile = `${process.cwd()}/storage/line-parse-error.sql`;
+
+				const dataReadableStream = createReadStream(dataFile, { encoding: 'utf8' });
+				// Create a writable stream to write to the destination file
+				const dataWritableStream = createWriteStream(dataSQLFile, { encoding: 'utf8' });
+				// Create a writable stream to write to the destination file
+				const lineErrorWritableStream = createWriteStream(dataErrorFile, { encoding: 'utf8' });
+				const status = "PENDING"
+				let incompleteLine = '';
+				// const timestamp = 1234567890;
+				const timestamp = Date.now();
+				dataReadableStream.on('data', (chunk) => {
+					const lines = (incompleteLine + chunk).split(/[\r\n]+/);
+					incompleteLine = lines.pop();
+					// const currentTimestamp = new Date().toISOString();
+
+					for (const line of lines) {
+						if (line.trim() !== '') {
+							try {
+								const jsonData = JSON.parse(line);
+								// Extract values from JSON
+								const { id, title, productsCount, key, namespace, __parentId, value, sku, price, collectionId } = jsonData;
+
+								// Add row to collection Buffer
+								if (id.search("Collection") > -1) {
+									dataWritableStream.write("INSERT INTO `collections` (`collection_id`, `timestamp`,`shop`,`status`) VALUES (" + mysql.escape(id) + ", " + mysql.escape(timestamp) + "," + mysql.escape(session.shop) + "," + mysql.escape(status) + ");" + '\n');
+								}
+								// Add row to Product Buffer
+								if (id.search("Product") > -1) {
+									dataWritableStream.write("INSERT INTO `products` (`prod_id`,`shop`, `collection_id`, `timestamp`) VALUES (" + mysql.escape(id) + ", " + mysql.escape(session.shop) + "," + mysql.escape(collectionId) + "," + mysql.escape(timestamp) + ");" + '\n');
+								}
+
+								// Add row to Metafield Buffer
+								if ((id.search("Metafield") > -1) && (key.search("full_sku") > -1)) {
+									dataWritableStream.write("INSERT INTO `metafields` (`metafield_id`,`product_id`,`shop`, `sku`, `collection_id`,`timestamp`) VALUES (" + mysql.escape(id) + "," + mysql.escape(__parentId) + "," + mysql.escape(session.shop) + ", " + mysql.escape(value) + ", " + mysql.escape(collectionId) + "," + mysql.escape(timestamp) + ");" + '\n');
+								}
+							} catch (error) {
+								lineErrorWritableStream.write(line + '\n');
+							}
+						}
+					}
+				}).on('end', async () => { }).on('error', (err) => {
+					console.error('Error reading data:', err);
+				});
+
+				await this.ProcessSqlFileToDB();
+
+				console.log(`JSONL file created at ${logFilePath} for collection ${collectionId}`);
+			} catch (error) {
+				console.error(`Error generating JSONL for collection ${collectionId}:`, error);
+			}
+		}
+		return 'JSONL files generated for all collections (if successful)';
+	},
+	
+	/* Purpose: This Function is used to the get collection vise product
+	* 	Arrage the collection product as per the sku 
+	*/
+	getCollection: async function (req, res) {
+		try {
+			// const bulkrunnerData = await modelExport.insertRunnerData(data, req, res).then(function (rows) {return rows	});
+			const get_collection_ids = await modelExport.getCollectionID(req, res);
+			console.log("get_collection-----", get_collection_ids)
+			for (const collectionId of get_collection_ids) {
+				const get_collection = await modelExport.getCollectionData(collectionId);
+				const updateStatus = await modelExport.collectionStatusUpdate(collectionId.collection_id, "RUNNING");
+				if (get_collection.length > 0) {
+					await this.separateData(req, res, get_collection);
+				}
+			}
+			return "collection Update Successfully";
+		} catch (error) {
+			throw new Error("Error : " + error);
+		}
+	},
+	separateData: async function (req, res, records) {
+		const skuCount = {};
+		const nonrepeat_data = [];
+		const repeat_data = [];
+
+		// First pass: count the occurrences of each SKU
+		records.forEach(record => {
+			skuCount[record.sku] = (skuCount[record.sku] || 0) + 1;
+		});
+
+		// Second pass: separate records based on SKU counts
+		records.forEach(record => {
+			if (skuCount[record.sku] === 1) {
+				nonrepeat_data.push(record);
+			} else {
+				repeat_data.push(record);
+			}
+		});
+
+		const interval = Math.ceil(nonrepeat_data.length / repeat_data.length);
+		let result = [...nonrepeat_data]; // Clone nonrepeatdata to result
+		let repeatIndex = 0;
+
+		for (let i = interval; i <= result.length && repeatIndex < repeat_data.length; i += interval + 1) {
+			result.splice(i, 0, repeat_data[repeatIndex]);
+			repeatIndex++;
+		}
+
+		// If there are remaining items in Repeatdata, append them to the end
+		if (repeatIndex < repeat_data.length) {
+			result = result.concat(repeat_data.slice(repeatIndex));
+		}
+
+		// console.log("result", result)
+		const output = {
+			id: result[0].collection_id,
+			moves: result.map((item, index) => ({
+				id: item.prod_id,
+				newPosition: index.toString()
+			}))
+		};
+
+		console.log("Product Sort ----", output);
+		await this.collectionProductUpdate(req, res, output)
+		return "collection move successfully";
+	},
+	collectionProductUpdate: async function (req, res, output) {
+		console.log("---------collectionProductUpdate----------")
+		const session = await Shopify.Utils.loadCurrentSession(req, res, USE_ONLINE_TOKENS);
+		const client = new Shopify.Clients.Graphql(session.shop, session.accessToken);
+
+		// Step 1: Update the collection sort order to 'MANUAL'
+		const updateCollectionSortOrder = `mutation collectionUpdate($input: CollectionInput!) {
+			collectionUpdate(input: $input) {
+			collection {
+				id
+				sortOrder
+			}
+			userErrors {
+				field
+				message
+				}
+				}
+			}`;
+
+		const sortOrderVariables = {
+			input: {
+				id: output.id,
+				sortOrder: 'MANUAL'
+			}
+		};
+		const updateSortOrderResponse = await client.query({
+			data: {
+				query: updateCollectionSortOrder,
+				variables: sortOrderVariables
+			},
+		});
+
+
+		if (updateSortOrderResponse.body.data.collectionUpdate.userErrors.length > 0) {
+			const updateStatus = await modelExport.collectionStatusUpdate(output.id, "RUNNING");
+
+			console.error('Error updating sort order:', updateSortOrderResponse.body.data.collectionUpdate.userErrors);
+			return;
+		}
+
+		// Step 2: Reorder the products in the collection
+		const collectionUpdate = `mutation collectionReorderProducts($id: ID!, $moves: [MoveInput!]!) {
+		collectionReorderProducts(id: $id, moves: $moves) {
+			job {
+				id
+			}
+			userErrors {
+				field
+				message
+			}
+			}
+		}`;
+
+		const variables = output;
+
+		const collectionData = await client.query({
+			data: {
+				query: collectionUpdate,
+				variables
+			},
+		});
+		const collectionStatusUpdate = await modelExport.collectionStatusUpdate(output.id, "COMPLETE");
+
+		console.log("-----customersData----", JSON.stringify(collectionData.body))
+		return "Collection Update successfully";
+	},
+
+
+	generateCollectionsCSVBackup: async function (req, res) {
+		const session = await Shopify.Utils.loadCurrentSession(req, res, USE_ONLINE_TOKENS);
+		const client = new Shopify.Clients.Graphql(session.shop, session.accessToken);
+
+		const fetchCollectionsQuery = `
+			{
+				collections(first: 250) {
+					edges {
+						node {
+							id
+						}
+					}
+				}
+			}
+		`;
+
+		const fetchCollectionsResponse = await client.query({
+			data: {
+				query: fetchCollectionsQuery
+			}
+		});
+
+		const allCollectionIds = fetchCollectionsResponse.body.data.collections.edges.map(edge => edge.node.id);
+		console.log('All Collection IDs:', allCollectionIds);
+
+		for (const collectionId of allCollectionIds) {
+			try {
+				// Build the GraphQL query for the current collection
+				const bulkQuery = `
+					{
+						collection(id: "${collectionId}") {
+							id
+							title
+							products(first: 250) {
+								edges {
+									node {
+										id
+										title
+									}
+								}
+							}
+						}
+					}
+				`;
+
+				// Execute the bulk operation for this collection
+				const startBulkOperation = await client.query({
+					data: {
+						query: `mutation {
+							bulkOperationRunQuery(
+								query: """
+								${bulkQuery}
+								"""
+							) {
+								bulkOperation {
+									id
+									status
+								}
+								userErrors {
+									field
+									message
+								}
+							}
+						}`
+					},
+				});
+				const startBulkOperationResponse = startBulkOperation.body.data.bulkOperationRunQuery;
+				console.log("startBulkOperationResponse", startBulkOperationResponse)
+				if (startBulkOperationResponse.userErrors.length > 0) {
+					throw new Error(`Bulk operation initiation failed for collection: ${collectionId}`);
+				}
+
+				const bulkOperationId = startBulkOperationResponse.bulkOperation.id;
+
+				// Polling the status of the bulk operation
+				let bulkOperationStatus = { status: 'RUNNING' };
+				while (bulkOperationStatus.status === 'RUNNING' || bulkOperationStatus.status === 'CREATED') {
+					await new Promise(resolve => setTimeout(resolve, 2000)); // Wait for 2 seconds before polling again
+
+					const statusResponse = await client.query({
+						data: {
+							query: `
+								{
+									node(id: "${bulkOperationId}") {
+										... on BulkOperation {
+											status
+											errorCode
+											createdAt
+											completedAt
+											objectCount
+											fileSize
+											url
+										}
+									}
+								}
+							`,
+						},
+					});
+
+					bulkOperationStatus = statusResponse.body.data.node;
+				}
+
+				if (bulkOperationStatus.status !== 'COMPLETED') {
+					console.error(`Bulk operation failed for collection: ${collectionId}`);
+					continue; // Skip to the next collection if this one fails
+				}
+
+				// Download the result file and parse the data
+				const response = await fetch(bulkOperationStatus.url);
+				const jsonlData = await response.text();
+
+				// Split the JSONL data into individual lines and parse each line to JSON
+				const jsonlLines = jsonlData.split('\n').filter(line => line.trim().length > 0);
+				const updatedJsonlLines = [];
+				updatedJsonlLines.push(JSON.stringify({ id: collectionId })); // Add the collection ID as the first entry
+
+				jsonlLines.forEach(line => {
+					const jsonObject = JSON.parse(line);
+					jsonObject.collectionId = collectionId; // Add the collection ID to the JSON object
+					updatedJsonlLines.push(JSON.stringify(jsonObject));
+				});
+				const updatedJsonlData = updatedJsonlLines.join('\n');
+
+				const sanitizedCollectionId = collectionId.replace(/[^a-z0-9]/gi, '_').toLowerCase(); // Sanitize collection ID for filenames
+				const fileName = `collection-${sanitizedCollectionId}.jsonl`;
+				const logFilePath = path.join(__dirname, '..', 'storage', 'backupraw', fileName);
+
+				// Ensure directory exists before writing file
+				const logDir = path.dirname(logFilePath);
+				if (!fs.existsSync(logDir)) {
+					fs.mkdirSync(logDir, { recursive: true });
+				}
+
+				fs.writeFileSync(logFilePath, updatedJsonlData);
+
+				const dataFile = logFilePath;
+				const dataSQLFile = `${process.cwd()}/storage/backupsql/${fileName}.sql`;
+				const dataErrorFile = `${process.cwd()}/storage/line-parse-error.sql`;
+
+				const dataReadableStream = createReadStream(dataFile, { encoding: 'utf8' });
+				// Create a writable stream to write to the destination file
+				const dataWritableStream = createWriteStream(dataSQLFile, { encoding: 'utf8' });
+				// Create a writable stream to write to the destination file
+				const lineErrorWritableStream = createWriteStream(dataErrorFile, { encoding: 'utf8' });
+				const status = "PENDING"
+				let incompleteLine = '';
+				// const timestamp = 1234567890;
+				const timestamp = Date.now();
+				dataReadableStream.on('data', (chunk) => {
+					const lines = (incompleteLine + chunk).split(/[\r\n]+/);
+					incompleteLine = lines.pop();
+					// const currentTimestamp = new Date().toISOString();
+					for (const line of lines) {
+						if (line.trim() !== '') {
+							try {
+								const jsonData = JSON.parse(line);
+								// Extract values from JSON
+								const { id, title, productsCount, key, namespace, __parentId, value, sku, price, collectionId } = jsonData;
+
+								// Add row to collection Buffer
+								if (id.search("Collection") > -1) {
+									dataWritableStream.write("INSERT INTO `collections` (`collection_id`, `timestamp`,`shop`,`status`) VALUES (" + mysql.escape(id) + ", " + mysql.escape(timestamp) + "," + mysql.escape(session.shop) + "," + mysql.escape(status) + ");" + '\n');
+								}
+								// Add row to Product Buffer
+								if (id.search("Product") > -1) {
+									dataWritableStream.write("INSERT INTO `productsbackup` (`prod_id`,`shop`, `collection_id`, `timestamp`) VALUES (" + mysql.escape(id) + ", " + mysql.escape(session.shop) + "," + mysql.escape(collectionId) + "," + mysql.escape(timestamp) + ");" + '\n');
+								}
+							} catch (error) {
+								lineErrorWritableStream.write(line + '\n');
+							}
+						}
+					}
+				}).on('end', async () => { }).on('error', (err) => {
+					console.error('Error reading data:', err);
+				});
+
+				// await this.ProcessSqlFileToDB();
+
+				console.log(`JSONL file created at ${logFilePath} for collection ${collectionId}`);
+			} catch (error) {
+				console.error(`Error generating JSONL for collection ${collectionId}:`, error);
+			}
+		}
+		return 'JSONL files generated for all collections (if successful)';
+	},
+	getCollectionBackup: async function (req, res) {
+		try {
+			// const bulkrunnerData = await modelExport.insertRunnerData(data, req, res).then(function (rows) {return rows	});
+			const get_collection_ids = await modelExport.getCollectionID(req, res);
+			console.log("get_collection-----", get_collection_ids)
+			for (const collectionId of get_collection_ids) {
+				const get_collection = await modelExport.getCollectionDataBackup(collectionId);
+				const updateStatus = await modelExport.collectionStatusUpdate(collectionId.collection_id, "RUNNING");
+				if (get_collection.length > 0) {
+					await this.separateDataBackup(req, res, get_collection);
+				}
+			}
+			return "collection Update Successfully";
+		} catch (error) {
+			throw new Error("Error : " + error);
+		}
+	},
+	separateDataBackup: async function (req, res, records) {
+		// const skuCount = {};
+		// const nonrepeat_data = [];
+		// const repeat_data = [];
+
+		// // First pass: count the occurrences of each SKU
+		// records.forEach(record => {
+		// 	skuCount[record.sku] = (skuCount[record.sku] || 0) + 1;
+		// });
+
+		// // Second pass: separate records based on SKU counts
+		// records.forEach(record => {
+		// 	if (skuCount[record.sku] === 1) {
+		// 		nonrepeat_data.push(record);
+		// 	} else {
+		// 		repeat_data.push(record);
+		// 	}
+		// });
+
+		// const interval = Math.ceil(nonrepeat_data.length / repeat_data.length);
+		// let result = [...nonrepeat_data]; // Clone nonrepeatdata to result
+		// let repeatIndex = 0;
+
+		// for (let i = interval; i <= result.length && repeatIndex < repeat_data.length; i += interval + 1) {
+		// 	result.splice(i, 0, repeat_data[repeatIndex]);
+		// 	repeatIndex++;
+		// }
+
+		// // If there are remaining items in Repeatdata, append them to the end
+		// if (repeatIndex < repeat_data.length) {
+		// 	result = result.concat(repeat_data.slice(repeatIndex));
+		// }
+
+		// console.log("result", result)
+		const output = {
+			id: records[0].collection_id,
+			moves: records.map((item, index) => ({
+				id: item.prod_id,
+				newPosition: index.toString()
+			}))
+		};
+
+		console.log("Product Sort ----", output);
+		await this.collectionProductUpdate(req, res, output)
+		return "collection move successfully";
+	},
 	/**
 	 * Purpose : Start point for export processing.
 	 * Get and Insert the operation ID into the database 
@@ -25,7 +618,7 @@ export const exportVariantRuleData = {
 	requestOperation: async function (req, res) {
 		try {
 			const data = await modelExport.runBulkOperation(req, res);
-			const bulkrunnerData = await modelExport.insertRunnerData(data, req, res).then(function (rows) {return rows	});
+			const bulkrunnerData = await modelExport.insertRunnerData(data, req, res).then(function (rows) { return rows });
 			return bulkrunnerData;
 		} catch (error) {
 			throw new Error("Error : " + error);
@@ -40,24 +633,24 @@ export const exportVariantRuleData = {
 	 * 
 	 * @returns Void
 	 */
-	processOperationsIDToSqlFile: async function(){
+	processOperationsIDToSqlFile: async function () {
 		const cron = await modelCronLock.checkLock('prepare-incomplete-operations');
 		console.log(cron)
-		if(cron.status == 'busy'){
+		if (cron.status == 'busy') {
 			return;
 		}
 		console.log('-------Start - prepare-incomplete-operations------');
 
 		await modelCronLock.acquireLock('prepare-incomplete-operations');
 		//const bulkData = await modelExport.getBulkDataFileUrl(session, data)
-		const incompleteOperations = await modelExport.processOperationsIDToSqlFile().then(function (rows) {	return rows	});
+		const incompleteOperations = await modelExport.processOperationsIDToSqlFile().then(function (rows) { return rows });
 		const filesToProcess = [];
-		for(let operation of incompleteOperations){
+		for (let operation of incompleteOperations) {
 			try {
 				const shOperation = await modelExport.checkOperationStatus(operation)
 				if ((shOperation.url == null) && (shOperation.status == 'COMPLETED')) { //No data available in shop
 					modelExport.operationStatusUpdate(operation.sh_operation_id, operation.sh_shop);
-				}else if (shOperation.url !== null) {
+				} else if (shOperation.url !== null) {
 					//this.saveRawDataFileInDrive(operation, shOperation)
 					filesToProcess.push({
 						operation: operation,
@@ -68,15 +661,15 @@ export const exportVariantRuleData = {
 				console.error('Error occurred:', error);
 			}
 		}
-		if(filesToProcess.length){
+		if (filesToProcess.length) {
 			await this.processRawFiles(filesToProcess);
 			await this.processSQLFiles(filesToProcess);
-		}else{
+		} else {
 			console.log('No Data')
 		}
 		await modelCronLock.releaseLock('prepare-incomplete-operations');
 	},
-	
+
 	/**
 	 * Purpose: This function is used to map the filelist object and wait till all the Json file get 
 	 * call the saveRawDataFileInDrive function
@@ -84,13 +677,13 @@ export const exportVariantRuleData = {
 	 * @param {*} fileList Object
 	 * @returns Void
 	 */
-	processRawFiles: async function(fileList){
+	processRawFiles: async function (fileList) {
 		const filePromises = fileList.map(fileData => this.saveRawDataFileInDrive(fileData.operation, fileData.shOperation));
 		try {
-		  await Promise.all(filePromises);
-		  console.log('All Raw files processed successfully.');
+			await Promise.all(filePromises);
+			console.log('All Raw files processed successfully.');
 		} catch (error) {
-		  console.error('Error occurred during raw file processing:', error);
+			console.error('Error occurred during raw file processing:', error);
 		}
 	},
 
@@ -100,13 +693,13 @@ export const exportVariantRuleData = {
 	 * @param {*} fileList Object
 	 * @returns Void
 	 */
-	processSQLFiles: async function(fileList){
+	processSQLFiles: async function (fileList) {
 		const filePromises = fileList.map(fileData => this.createAndSaveSQLFileInDrive(fileData.operation, fileData.shOperation));
 		try {
-		  await Promise.all(filePromises);
-		  console.log('All SQL files processed successfully.');
+			await Promise.all(filePromises);
+			console.log('All SQL files processed successfully.');
 		} catch (error) {
-		  console.error('Error occurred during SQL file processing:', error);
+			console.error('Error occurred during SQL file processing:', error);
 		}
 	},
 
@@ -117,51 +710,49 @@ export const exportVariantRuleData = {
 	 * @param {*} shOperation object
 	 * @returns Void
 	 */
-	saveRawDataFileInDrive: async function(operation, shOperation) {
+	saveRawDataFileInDrive: async function (operation, shOperation) {
 		try {
-		  console.log('----------saveRawDataFileInDrive------------')
-		  // Make a GET request to fetch the file from the provided URL
-		  //const writeFile = util.promisify(writeFile);
-		  const response = await axios.get(shOperation.url);
-		  console.log('----------axios------------')
-		  // Define the path and filename for saving the file
+			console.log('----------saveRawDataFileInDrive------------')
+			// Make a GET request to fetch the file from the provided URL
+			//const writeFile = util.promisify(writeFile);
+			const response = await axios.get(shOperation.url);
+			console.log('----------axios------------')
+			// Define the path and filename for saving the file
 
-		  let operationId = operation.sh_operation_id;
-		  operationId = operationId.split('/');
-		  operationId = operationId[operationId.length - 1];
-		  const dataFile = `${process.cwd()}/storage/raw/${operationId}-o-${operation.sh_shop}.jsonl`;
-		  await promises.writeFile(dataFile, response.data, { encoding: "utf8", flag: "w", mode: 0o666 });
+			let operationId = operation.sh_operation_id;
+			operationId = operationId.split('/');
+			operationId = operationId[operationId.length - 1];
+			const dataFile = `${process.cwd()}/storage/raw/${operationId}-o-${operation.sh_shop}.jsonl`;
+			await promises.writeFile(dataFile, response.data, { encoding: "utf8", flag: "w", mode: 0o666 });
 
 		} catch (error) {
-		  console.error('Error occurred while saving file:', error);
+			console.error('Error occurred while saving file:', error);
 		}
-	 },
-	  /**
-	  * Purpose: Create sql file and save into the app folder
-	  * In sql file, products and metafields and variants insert query written
-	  * 
-	  * @param {*} operation 
-	  * @param {*} shOperation 
-	  * @returns Void
-	  */
-	 createAndSaveSQLFileInDrive: async function(operation, shOperation){
+	},
+	/**
+	* Purpose: Create sql file and save into the app folder
+	* In sql file, products and metafields and variants insert query written
+	* 
+	* @param {*} operation 
+	* @param {*} shOperation 
+	* @returns Void
+	*/
+	createBackupProductCollectionSQL: async function (req, res) {
 		// Create a readable stream to read the large data file
-		let operationId = operation.sh_operation_id;
-		operationId = operationId.split('/');
-		operationId = operationId[operationId.length - 1];
-		const dataFile = `${process.cwd()}/storage/raw/${operationId}-o-${operation.sh_shop}.jsonl`;
-		const dataSQLFile = `${process.cwd()}/storage/sql/${operationId}-o-${operation.sh_shop}.sql`;
-		const dataErrorFile = `${process.cwd()}/storage/line-parse-error/${operationId}-o-${operation.sh_shop}.sql`;
+		const dataFile = `${process.cwd()}/storage/backupraw/collection-gid___shopify_collection_479774671127.jsonl`
+		console.log(dataFile)
+		const dataSQLFile = `${process.cwd()}/storage/backupsql/collection-gid___shopify_collection_479774671127.jsonl.sql`;
 
-		// Create a readable stream to read from the source file
+		const dataErrorFile = `${process.cwd()}/storage/line-parse-error.sql`;
+
 		const dataReadableStream = createReadStream(dataFile, { encoding: 'utf8' });
 		// Create a writable stream to write to the destination file
 		const dataWritableStream = createWriteStream(dataSQLFile, { encoding: 'utf8' });
 		// Create a writable stream to write to the destination file
 		const lineErrorWritableStream = createWriteStream(dataErrorFile, { encoding: 'utf8' });
-
+		const status = "PENDING"
 		let incompleteLine = '';
-
+		const timestamp = Date.now();
 		dataReadableStream.on('data', (chunk) => {
 			const lines = (incompleteLine + chunk).split(/[\r\n]+/);
 			incompleteLine = lines.pop();
@@ -170,31 +761,22 @@ export const exportVariantRuleData = {
 					try {
 						const jsonData = JSON.parse(line);
 						// Extract values from JSON
-						const { id, title, key, namespace, __parentId ,value, sku, price } = jsonData;
+						const { id, title, productsCount, key, namespace, __parentId, value, sku, price, collectionId } = jsonData;
 
-						// Add row to Product Buffer
-						if (id.search("Product/") > -1) {
-							dataWritableStream.write("INSERT INTO `products` (`shop`, `operation_id`, `product_id`, `title`) VALUES ("+ mysql.escape(operation.sh_shop) +", "+ mysql.escape(operation.sh_operation_id) +", "+ mysql.escape(id) +", "+ mysql.escape(title)+");" + '\n');
+						// Add row to collection Buffer
+						if (id.search("Collection") > -1) {
+							dataWritableStream.write("INSERT INTO `collections` (`collection_id`, `timestamp`,`shop`,`status`) VALUES (" + mysql.escape(id) + ", " + mysql.escape(timestamp) + "," + mysql.escape("anuragoscp.myshopify.com") + "," + mysql.escape(status) + ");" + '\n');
 						}
-
 						// Add row to Product Buffer
-						if (id.search("ProductVariant") > -1) {
-							dataWritableStream.write("INSERT INTO `variants` (`sh_shop`, `sh_operation_id`, `sh_variant_id`, `sh_parent_id`, `title`, `price`, `sku`) VALUES ("+ mysql.escape(operation.sh_shop) +", "+ mysql.escape(operation.sh_operation_id) +", "+mysql.escape(id)+", "+ mysql.escape(__parentId) +", "+ mysql.escape(title)+", "+ mysql.escape(price)+", "+mysql.escape(sku)+");" + '\n');
-						}
-
-						// Add row to metafield Buffer
-						if ((id.search("Metafield") > -1) && (namespace == 'oscpPriceRule')) {
-							dataWritableStream.write("INSERT INTO `metafields` (`shop`, `operation_id`, `metafield_id`, `parent_id`, `key_name`, `namespace`, `meta_value`) VALUES ("+ mysql.escape(operation.sh_shop) +", "+ mysql.escape(operation.sh_operation_id) +", "+ mysql.escape(id) +", "+ mysql.escape(__parentId)+", "+ mysql.escape(key)+", "+ mysql.escape(namespace)+", "+ mysql.escape(value)+");" + '\n');
+						if (id.search("Product") > -1) {
+							dataWritableStream.write("INSERT INTO `products` (`prod_id`,`shop`, `collection_id`, `timestamp`) VALUES (" + mysql.escape(id) + ", " + mysql.escape("anuragoscp.myshopify.com") + "," + mysql.escape(collectionId) + "," + mysql.escape(timestamp) + ");" + '\n');
 						}
 					} catch (error) {
 						lineErrorWritableStream.write(line + '\n');
-						console.error("Line Parsing Error ", line)
-						console.error("Line Parsing Error ", error)
 					}
-
 				}
 			}
-		}).on('end', async () => {}).on('error', (err) => {
+		}).on('end', async () => { }).on('error', (err) => {
 			console.error('Error reading data:', err);
 		});
 	},
@@ -205,10 +787,10 @@ export const exportVariantRuleData = {
 	 * 
 	 * @returns Void
 	 */
-	ProcessSqlFileToDB: async function(){
+	ProcessSqlFileToDB: async function () {
 		const cron = await modelCronLock.checkLock('upload-incomplete-operations');
 		console.log(cron)
-		if(cron.status == 'busy'){
+		if (cron.status == 'busy') {
 			return;
 		}
 		console.log('-------Start - upload-incomplete-operations------');
@@ -229,12 +811,12 @@ export const exportVariantRuleData = {
 				.filter((file) => !file.startsWith('processed-'))
 				.filter((file) => !file.startsWith('error-'))
 				.map((file) => ({
-				name: file,
-				path: path.join(directoryPath, file),
-				lastModified: statSync(path.join(directoryPath, file)).mtime.getTime(),
+					name: file,
+					path: path.join(directoryPath, file),
+					lastModified: statSync(path.join(directoryPath, file)).mtime.getTime(),
 				}))
 				.sort((a, b) => b.lastModified - a.lastModified)
-				.slice(0, 5);
+				.slice(0, 1);
 
 			// Step 3: Read each file's contents
 			sortedFiles.forEach(async (file) => {
@@ -257,48 +839,37 @@ export const exportVariantRuleData = {
 	 * @param {*} sqlFile file .sql
 	 * @returns Void
 	 */
-	dumpVariantSqlFile: async function(sqlFile) {
+	dumpVariantSqlFile: async function (sqlFile) {
 		return new Promise((resolve, reject) => {
 
-		//   const sqlDirectory = 'D:/xampp/mysql/bin'
-		  //const command = "D:/xampp/mysql/bin/mysqldump -u root -h localhost custom_price_wholesale > "+sqlFile.path;
-		  //const command = `mysql -u root -h localhost -pensyspass0101 custom_price_wholesale < ${sqlFile.path}`;
-		  let command = ``;
-		  if(process.env.NODE_ENV === "production"){
-			 command = `mysql -u ${process.env.DB_USER} -h ${process.env.DB_HOST} -p${process.env.DB_PASSWORD} ${process.env.DB_NAME} < ${sqlFile.path}`;
-		  }else{
-			const pass = (cnf.dev.PASSWORD == "") ? `` : `-p${cnf.dev.PASSWORD}`
-			 command = `mysql -u ${cnf.dev.USER} -h ${cnf.dev.HOST} ${pass} ${cnf.dev.DB} < ${sqlFile.path}`;
-		  }
-
-		  exec(command, (error, stdout, stderr) => {
-			const fileName = sqlFile.name;
-			const fileDetails = fileName.split('-o-');
-			const operationId = fileDetails[0];
-			const shopName = fileDetails[1].replace('.sql', '');
-			
-			if (error) {
-				rename(sqlFile.path,`${process.cwd()}/storage/sql/error-o-${sqlFile.name}`, () => {
-					modelExport.operationErrorStatusUpdate('gid://shopify/BulkOperation/'+operationId, shopName);
-					console.log("\nFile Renamed!\n");})
-			  reject(`Error executing command: `);
-			  return;
+			//   const sqlDirectory = 'D:/xampp/mysql/bin'
+			//const command = "D:/xampp/mysql/bin/mysqldump -u root -h localhost custom_price_wholesale > "+sqlFile.path;
+			//const command = `mysql -u root -h localhost -pensyspass0101 custom_price_wholesale < ${sqlFile.path}`;
+			let command = ``;
+			if (process.env.NODE_ENV === "production") {
+				command = `mysql -u ${process.env.DB_USER} -h ${process.env.DB_HOST} -p${process.env.DB_PASSWORD} ${process.env.DB_NAME} < ${sqlFile.path}`;
+			} else {
+				const pass = (cnf.dev.PASSWORD == "") ? `` : `-p${cnf.dev.PASSWORD}`
+				command = `mysql -u ${cnf.dev.USER} -h ${cnf.dev.HOST} ${pass} ${cnf.dev.DB} < ${sqlFile.path}`;
 			}
+			exec(command, (error, stdout, stderr) => {
+				const fileName = sqlFile.name;
 
-			// commented out because this method execute with returning warning too
-			// if (stderr) {
-			// 	rename(sqlFile.path, `${process.cwd()}/storage/sql/error-${sqlFile.name}`, () => {
-			// 		console.log("\nFile Renamed!\n");})
-			//   reject(`Command stderr: ${stderr}`);
-			//   return;
-			// }
+				if (error) {
+					rename(sqlFile.path, `${process.cwd()}/storage/sql/error-o-${sqlFile.name}`, () => {
+						modelExport.operationErrorStatusUpdate('gid://shopify/BulkOperation/error.json');
+						console.log("\nFile Renamed!\n");
+					})
+					reject(`Error executing command: `);
+					return;
+				}
 
-			rename(sqlFile.path, `${process.cwd()}/storage/sql/processed-o-${sqlFile.name}`, () => {
-				console.log("\nFile Renamed!\n");})
+				rename(sqlFile.path, `${process.cwd()}/storage/sql/processed-o-${sqlFile.name}`, () => {
+					console.log("\nFile Renamed!\n");
+				})
 
-			modelExport.operationStatusUpdate('gid://shopify/BulkOperation/'+operationId, shopName);
-			resolve(`SQL file '${sqlFile}' dumped into the database successfully.`);
-		  });
+				resolve(`SQL file '${sqlFile}' dumped into the database successfully.`);
+			});
 		});
 	},
 
@@ -316,7 +887,7 @@ export const exportVariantRuleData = {
 			console.log('shopData ==============', shopData)
 			//return shopData;
 			const timezone_location = shopData.ianaTimezone;
-			const exportOperationList = await modelExport.getExportOperationList(req, res).then(function (rows) {return rows});
+			const exportOperationList = await modelExport.getExportOperationList(req, res).then(function (rows) { return rows });
 			const modifiedExportOperationList = exportOperationList.map((item) => {
 				return {
 					...item,
@@ -339,8 +910,8 @@ export const exportVariantRuleData = {
 	 * @output Return the path to the generated data file (get the csv file)
 	 */
 	getCsvData: async function (req, res) {
-		const resourceId =	"gid://shopify/BulkOperation/" + req.query.resource_id;
-		const CSVMetaValue = await modelExport.getCSVMetaValue(resourceId, req, res).then(function (rows) {	return rows	});
+		const resourceId = "gid://shopify/BulkOperation/" + req.query.resource_id;
+		const CSVMetaValue = await modelExport.getCSVMetaValue(resourceId, req, res).then(function (rows) { return rows });
 		const csv = await this.createRuleCSV(
 			//JSON.parse(JSON.stringify(CSVMetaValue)),
 			CSVMetaValue,
@@ -349,7 +920,7 @@ export const exportVariantRuleData = {
 		);
 		return csv;
 	},
-	
+
 	/**
 	 * Purpose: This function is responsible for converting the product and variant data into a createCsvRule file.
 	 * call the convertJSONToCSV function
@@ -380,7 +951,7 @@ export const exportVariantRuleData = {
 				headers: true
 			})
 
-			return {'path': datafilePath, 'data': csvData}; // Return the path to the generated data file
+			return { 'path': datafilePath, 'data': csvData }; // Return the path to the generated data file
 		} catch (error) {
 			console.error(error);
 		}
@@ -412,7 +983,7 @@ export const exportVariantRuleData = {
 				"Variant ID": variantId,
 				"Product Title (Ref)": this.replacecharacters(variant.product_name),
 				"Variant Name (Ref)": this.replacecharacters(variant.title),
-				"Variant SKU (Ref)" : this.replacecharacters(variant.sku),
+				"Variant SKU (Ref)": this.replacecharacters(variant.sku),
 				"Variant Price default currency (Ref)": variant.price,
 				"Customer Tag": customer,
 				"Currency Code": currency,
@@ -432,7 +1003,7 @@ export const exportVariantRuleData = {
 	 * @param {*} char (string and integer)
 	 * @returns char (string is cleaned up and ready for further processing)
 	 */
-	replacecharacters: function(char) {
+	replacecharacters: function (char) {
 		if (char === null) {
 			char = ''; // Set char to an empty string if it is null
 		} else {
@@ -440,5 +1011,5 @@ export const exportVariantRuleData = {
 		}
 		return char;
 	}
-	
+
 };
